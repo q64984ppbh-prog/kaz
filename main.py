@@ -15,12 +15,14 @@ logger = logging.getLogger(__name__)
 ADMIN_WALLET = 'UQCv8Hmrha20qESNP5yihAw-C1DqiFcsJV9pygNJNyQVNwd7'
 TONAPI_KEY = 'AHPGLWOMHJHTMWQAAAAH5W3N7B52U7HMLD3EZIQ2EUNTYXBNSETPNE434B7EEU7GL3DLMGI'
 TONAPI_URL = 'https://tonapi.io/v2'
-DB_PATH = '/root/kaz/casino.db'
+DB_PATH = str(Path(__file__).with_name('casino.db'))
 CRYPTOBOT_TOKEN = '605286:AA7rTt4SfHrggZmhJJUwT4hGrL8zSeDk2qw'
 CRYPTOBOT_API = 'https://pay.crypt.bot/api'
 
 TOKEN = '8731702089:AAHOAcCPSsbQBeYDqdizzxNO4mS8_uHfd4Q'
 WEBAPP_URL = 'https://creator-buys-salem-labs.trycloudflare.com'
+BOT_USERNAME = 'TopGiftCrashBot'
+REF_REWARD_RATE = 0.10
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -28,13 +30,31 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS players (
         user_id INTEGER PRIMARY KEY, username TEXT, first_name TEXT, last_name TEXT,
         avatar_url TEXT, balance REAL DEFAULT 100.0, wallet_address TEXT,
+        ref_code TEXT UNIQUE, referrer_id INTEGER, ref_balance REAL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    for sql in (
+        'ALTER TABLE players ADD COLUMN ref_code TEXT',
+        'ALTER TABLE players ADD COLUMN referrer_id INTEGER',
+        'ALTER TABLE players ADD COLUMN ref_balance REAL DEFAULT 0',
+    ):
+        try: c.execute(sql)
+        except sqlite3.OperationalError: pass
+    c.execute('''CREATE TABLE IF NOT EXISTS referrals (
+        referrer_id INTEGER, referred_id INTEGER PRIMARY KEY,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
     c.execute('''CREATE TABLE IF NOT EXISTS deposits (
         id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, amount_game REAL,
-        amount_ton REAL, invoice_id TEXT, status TEXT DEFAULT 'pending',
+        amount_ton REAL, invoice_id TEXT, pay_url TEXT, status TEXT DEFAULT 'pending', method TEXT DEFAULT 'cryptobot',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
+    for sql in (
+        'ALTER TABLE deposits ADD COLUMN pay_url TEXT',
+        "ALTER TABLE deposits ADD COLUMN method TEXT DEFAULT 'cryptobot'",
+    ):
+        try: c.execute(sql)
+        except sqlite3.OperationalError: pass
     c.execute('''CREATE TABLE IF NOT EXISTS transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, type TEXT,
         amount REAL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -49,7 +69,7 @@ def get_player(uid):
     row = c.fetchone()
     conn.close()
     if row:
-        cols = ['user_id','username','first_name','last_name','avatar_url','balance','wallet_address','created_at']
+        cols = [desc[0] for desc in c.description]
         return dict(zip(cols, row))
     return None
 
@@ -68,12 +88,56 @@ def update_player(uid, **kwargs):
     conn.commit()
     conn.close()
 
+def ref_code_for(uid):
+    digest = hashlib.blake2s(str(uid).encode(), digest_size=5).hexdigest().upper()
+    return f'TG{digest}'
+
+def public_player(p):
+    name = f"{p.get('first_name') or ''} {p.get('last_name') or ''}".strip() or (('@' + p['username']) if p.get('username') else f"Игрок {str(p.get('user_id'))[-4:]}")
+    return name[:24]
+
+def ensure_referral(uid, ref_code=None):
+    p = get_player(uid)
+    if not p:
+        return
+    changes = {}
+    if not p.get('ref_code'):
+        changes['ref_code'] = ref_code_for(uid)
+    if ref_code and not p.get('referrer_id'):
+        conn = sqlite3.connect(DB_PATH); c = conn.cursor()
+        c.execute('SELECT user_id FROM players WHERE ref_code=?', (ref_code,))
+        row = c.fetchone()
+        if row and row[0] != uid:
+            c.execute('INSERT OR IGNORE INTO referrals (referrer_id, referred_id) VALUES (?,?)', (row[0], uid))
+            if c.rowcount:
+                changes['referrer_id'] = row[0]
+        conn.commit(); conn.close()
+    if changes:
+        update_player(uid, **changes)
+
+def credit_deposit(dep_id, user_id, amount):
+    conn = sqlite3.connect(DB_PATH); c = conn.cursor()
+    c.execute('UPDATE deposits SET status=? WHERE id=? AND status!=?', ('paid', dep_id, 'paid'))
+    changed = c.rowcount
+    if changed:
+        c.execute('UPDATE players SET balance=balance+? WHERE user_id=?', (amount, user_id))
+        c.execute('INSERT INTO transactions (user_id, type, amount) VALUES (?,?,?)', (user_id, 'deposit', amount))
+        c.execute('SELECT referrer_id FROM players WHERE user_id=?', (user_id,))
+        row = c.fetchone()
+        if row and row[0]:
+            reward = round(amount * REF_REWARD_RATE, 6)
+            c.execute('UPDATE players SET balance=balance+?, ref_balance=COALESCE(ref_balance,0)+? WHERE user_id=?', (reward, reward, row[0]))
+            c.execute('INSERT INTO transactions (user_id, type, amount) VALUES (?,?,?)', (row[0], 'referral_bonus', reward))
+    conn.commit(); conn.close()
+    return bool(changed)
+
 def generate_crash_point():
     r = random.random()
-    if r < 0.25: return round(random.uniform(1.0, 1.5), 2)
-    elif r < 0.50: return round(random.uniform(1.5, 2.5), 2)
-    elif r < 0.75: return round(random.uniform(2.5, 5.0), 2)
-    else: return round(random.uniform(5.0, 15.0), 2)
+    if r < 0.42: return round(random.uniform(1.0, 1.45), 2)
+    elif r < 0.74: return round(random.uniform(1.45, 2.4), 2)
+    elif r < 0.94: return round(random.uniform(2.4, 5.0), 2)
+    elif r < 0.992: return round(random.uniform(5.0, 12.0), 2)
+    return round(random.uniform(12.0, 25.0), 2)
 
 @dataclass
 class GameState:
@@ -105,10 +169,11 @@ def static_files(path): return send_from_directory('static', path)
 @app.route('/api/init', methods=['POST'])
 def init():
     data = request.json; uid = data.get('user_id')
-    p = get_player(uid)
     update_player(uid, username=data.get('username',''), first_name=data.get('first_name',''), last_name=data.get('last_name',''), avatar_url=data.get('avatar_url',''))
+    ensure_referral(uid, data.get('ref_code'))
     p = get_player(uid)
-    return jsonify({'status':'ok','balance':p['balance'],'wallet':p['wallet_address'],
+    conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('SELECT COUNT(*) FROM referrals WHERE referrer_id=?',(uid,)); ref_count=c.fetchone()[0]; conn.close()
+    return jsonify({'status':'ok','balance':p['balance'],'wallet':p['wallet_address'],'first_name':p['first_name'],'last_name':p['last_name'],'ref_code':p['ref_code'],'ref_count':ref_count,'ref_balance':p.get('ref_balance') or 0,
         'game_state':{'status':game_state.status,'multiplier':game_state.current_multiplier,'countdown':game_state.countdown,'last_results':game_state.last_results,'crash_point':game_state.crash_point if game_state.status=='crashed' else None},
         'has_bet':uid in game_state.bets,'current_bet':game_state.bets.get(uid,{}).get('amount',0)})
 
@@ -143,62 +208,13 @@ def cashout():
 @app.route('/api/create_deposit', methods=['POST'])
 def create_deposit():
     data = request.json; uid = data.get('user_id'); amt = float(data.get('amount',0))
-    p = get_player(uid)
-    if not p['wallet_address']: return jsonify({'status':'error','message':'Connect wallet'})
-    if amt<=0: return jsonify({'status':'error','message':'Invalid amount'})
-    ton_amt = round(amt, 4)
-    headers = {'Crypto-Pay-API-Token': CRYPTOBOT_TOKEN}
-    payload = {'amount': ton_amt, 'currency_type': 'crypto', 'asset': 'TON', 'description': f'Deposit {uid}'}
-    try:
-        r = requests.post(f'{CRYPTOBOT_API}/createInvoice', headers=headers, json=payload, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            if data.get('ok'):
-                invoice = data['result']
-                invoice_id = invoice['invoice_id']
-                pay_url = invoice['pay_url']
-                conn = sqlite3.connect(DB_PATH)
-                c = conn.cursor()
-                c.execute('INSERT INTO deposits (user_id, amount_game, amount_ton, invoice_id) VALUES (?,?,?,?)', (uid, amt, ton_amt, str(invoice_id)))
-                dep_id = c.lastrowid
-                conn.commit()
-                conn.close()
-                return jsonify({'status':'ok','deposit_id':dep_id,'pay_url':pay_url,'invoice_id':invoice_id})
-    except Exception as e:
-        logger.error(f'CryptoBot error: {e}')
-    return jsonify({'status':'error','message':'CryptoBot error'})
-
-@app.route('/api/deposit_status', methods=['POST'])
-def deposit_status():
-    data = request.json; dep_id = data.get('deposit_id')
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('SELECT invoice_id, status FROM deposits WHERE id=?', (dep_id,))
-    row = c.fetchone()
-    conn.close()
-    if not row:
-        return jsonify({'status':'not_found'})
-    invoice_id, status = row
-    if status == 'paid':
-        return jsonify({'status':'paid'})
-    headers = {'Crypto-Pay-API-Token': CRYPTOBOT_TOKEN}
-    try:
-        r = requests.get(f'{CRYPTOBOT_API}/getInvoices?invoice_id={invoice_id}', headers=headers, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            if data.get('ok') and data['result']['items']:
-                inv = data['result']['items'][0]
-                if inv['status'] == 'paid':
-                    conn = sqlite3.connect(DB_PATH)
-                    c = conn.cursor()
-                    c.execute('UPDATE deposits SET status=? WHERE id=?', ('paid', dep_id))
-                    c.execute('INSERT INTO transactions (user_id, type, amount) VALUES (?,?,?)', (data.get('user_id'), 'deposit', inv['amount']))
-                    conn.commit()
-                    conn.close()
-                    return jsonify({'status':'paid'})
-    except Exception as e:
-        logger.error(f'Status check error: {e}')
-    return jsonify({'status':'pending'})
+    if amt <= 0: return jsonify({'status':'error','message':'Invalid amount'})
+    comment = f"topgift:{uid}:{secrets.token_hex(5)}"
+    conn = sqlite3.connect(DB_PATH); c = conn.cursor()
+    c.execute('INSERT INTO deposits (user_id, amount_game, amount_ton, invoice_id, method) VALUES (?,?,?,?,?)', (uid, amt, amt, comment, 'ton'))
+    dep_id = c.lastrowid; conn.commit(); conn.close()
+    payload = base64.b64encode(comment.encode()).decode()
+    return jsonify({'status':'ok','deposit_id':dep_id,'admin_wallet':ADMIN_WALLET,'amount_ton':amt,'payload':payload})
 
 @app.route('/api/create_crypto_deposit', methods=['POST'])
 def create_crypto_deposit():
@@ -207,15 +223,54 @@ def create_crypto_deposit():
     if coin not in ('TON', 'USDT') or amt <= 0:
         return jsonify({'status':'error','message':'Invalid'})
     headers = {'Crypto-Pay-API-Token': CRYPTOBOT_TOKEN}
-    payload = {'amount': amt, 'currency_type': 'crypto', 'asset': coin, 'description': f'Deposit {uid}'}
+    payload = {'amount': str(amt), 'currency_type': 'crypto', 'asset': coin, 'description': f'TopGift deposit {uid}', 'payload': f'{uid}:{secrets.token_hex(6)}'}
     try:
         r = requests.post(f'{CRYPTOBOT_API}/createInvoice', headers=headers, json=payload, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            if data.get('ok'):
-                return jsonify({'status':'ok','pay_url':data['result']['pay_url']})
-    except: pass
+        js = r.json()
+        if r.status_code == 200 and js.get('ok'):
+            inv=js['result']; pay_url=inv.get('mini_app_invoice_url') or inv.get('web_app_invoice_url') or inv.get('bot_invoice_url') or inv.get('pay_url')
+            conn=sqlite3.connect(DB_PATH); c=conn.cursor()
+            c.execute('INSERT INTO deposits (user_id, amount_game, amount_ton, invoice_id, pay_url, method) VALUES (?,?,?,?,?,?)', (uid, amt, amt, str(inv['invoice_id']), pay_url, 'cryptobot'))
+            dep_id=c.lastrowid; conn.commit(); conn.close()
+            return jsonify({'status':'ok','deposit_id':dep_id,'pay_url':pay_url,'invoice_id':inv['invoice_id']})
+    except Exception as e:
+        logger.error(f'CryptoBot error: {e}')
     return jsonify({'status':'error','message':'CryptoBot error'})
+
+@app.route('/api/deposit_status', methods=['POST'])
+def deposit_status():
+    req = request.json; dep_id = req.get('deposit_id')
+    conn = sqlite3.connect(DB_PATH); c = conn.cursor()
+    c.execute('SELECT user_id, amount_game, amount_ton, invoice_id, status, method FROM deposits WHERE id=?', (dep_id,))
+    row = c.fetchone(); conn.close()
+    if not row: return jsonify({'status':'not_found'})
+    user_id, amount_game, amount_ton, invoice_id, status, method = row
+    if status == 'paid': return jsonify({'status':'paid'})
+    if method == 'cryptobot':
+        headers = {'Crypto-Pay-API-Token': CRYPTOBOT_TOKEN}
+        try:
+            r = requests.get(f'{CRYPTOBOT_API}/getInvoices', headers=headers, params={'invoice_ids': invoice_id}, timeout=10)
+            js = r.json()
+            items = js.get('result', {}).get('items', []) if js.get('ok') else []
+            if items and items[0].get('status') == 'paid':
+                credit_deposit(dep_id, user_id, amount_game)
+                return jsonify({'status':'paid'})
+        except Exception as e: logger.error(f'Status check error: {e}')
+    else:
+        try:
+            r=requests.get(f'{TONAPI_URL}/blockchain/accounts/{ADMIN_WALLET}/transactions', headers={'Authorization': f'Bearer {TONAPI_KEY}'}, params={'limit':20}, timeout=10)
+            if r.status_code == 200 and invoice_id in r.text:
+                credit_deposit(dep_id, user_id, amount_game)
+                return jsonify({'status':'paid'})
+        except Exception as e: logger.error(f'TON status error: {e}')
+    return jsonify({'status':'pending'})
+
+@app.route('/api/referral', methods=['POST'])
+def referral():
+    uid=(request.json or {}).get('user_id')
+    p=get_player(uid); ensure_referral(uid); p=get_player(uid)
+    conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('SELECT COUNT(*) FROM referrals WHERE referrer_id=?',(uid,)); count=c.fetchone()[0]; conn.close()
+    return jsonify({'status':'ok','ref_code':p['ref_code'],'ref_count':count,'ref_balance':p.get('ref_balance') or 0,'link':f'https://t.me/{BOT_USERNAME}?start={p["ref_code"]}'})
 
 @app.route('/api/transactions', methods=['POST'])
 def transactions():
@@ -239,8 +294,14 @@ def set_notify(): return jsonify({'status': 'ok'})
 def get_game_state():
     players_list=[]
     for uid,bet in game_state.bets.items():
-        p=get_player(uid)
-        players_list.append({'name':f"{p['first_name']} {p['last_name']}".strip() or p['username'] or 'Player','avatar':p['avatar_url'],'bet':bet['amount'],'cashed_out':bet['cashed_out'],'multiplier':bet['multiplier']})
+        p=get_player(uid) or {}
+        players_list.append({'name':public_player(p),'avatar':p.get('avatar_url') or '','bet':bet['amount'],'cashed_out':bet['cashed_out'],'multiplier':bet['multiplier'] or game_state.current_multiplier})
+    if not players_list:
+        conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('SELECT user_id,username,first_name,last_name,avatar_url FROM players ORDER BY created_at DESC LIMIT 8')
+        for r in c.fetchall():
+            p={'user_id':r[0],'username':r[1],'first_name':r[2],'last_name':r[3],'avatar_url':r[4]}
+            players_list.append({'name':public_player(p),'avatar':p.get('avatar_url') or '','bet':0,'cashed_out':False,'multiplier':1})
+        conn.close()
     return jsonify({'status':game_state.status,'multiplier':game_state.current_multiplier,'countdown':game_state.countdown,'last_results':game_state.last_results,'crash_point':game_state.crash_point if game_state.status=='crashed' else None,'players':players_list})
 
 def run_game_loop():
@@ -251,8 +312,7 @@ def run_game_loop():
         st=time.time()
         while game_state.current_multiplier<game_state.crash_point:
             elapsed=time.time()-st
-            acceleration=1+game_state.current_multiplier*0.4
-            game_state.current_multiplier=round(1.0+elapsed*0.15*acceleration,2)
+            game_state.current_multiplier=round(1.0 + 0.10 * (pow(1.55, elapsed) - 1.0), 2)
             for uid, bet in list(game_state.bets.items()):
                 target = float(bet.get('auto_cashout') or 0)
                 if target and not bet['cashed_out'] and game_state.current_multiplier >= target:
@@ -280,6 +340,9 @@ async def run_bot():
     dp=Dispatcher()
     @dp.message(Command('start'))
     async def cmd_start(message: types.Message):
+        ref=(message.text.split(maxsplit=1)[1].strip() if message.text and len(message.text.split(maxsplit=1))>1 else '')
+        update_player(message.from_user.id, username=message.from_user.username or '', first_name=message.from_user.first_name or '', last_name=message.from_user.last_name or '')
+        ensure_referral(message.from_user.id, ref)
         kb=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Play TopGift (RU)", web_app=WebAppInfo(url=WEBAPP_URL))]])
         await message.answer("Welcome to TopGift! Start winning real Telegram Gifts right now!", reply_markup=kb)
     await dp.start_polling(bot)
