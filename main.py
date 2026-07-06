@@ -201,6 +201,24 @@ def deposit_status():
     conn.close()
     return jsonify({'status': row[0] if row else 'not_found'})
 
+@app.route('/api/transactions', methods=['POST'])
+def transactions():
+    data = request.json; uid = data.get('user_id')
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('SELECT type, amount, created_at FROM transactions WHERE user_id=? ORDER BY created_at DESC LIMIT 30', (uid,))
+    txs = [{'type': r[0], 'amount': r[1], 'date': r[2]} for r in c.fetchall()]
+    c.execute('SELECT amount_game, status, created_at FROM deposits WHERE user_id=? ORDER BY created_at DESC LIMIT 30', (uid,))
+    deps = [{'amount_game': r[0], 'status': r[1], 'date': r[2]} for r in c.fetchall()]
+    conn.close()
+    return jsonify({'transactions': txs, 'deposits': deps})
+
+@app.route('/api/set_lang', methods=['POST'])
+def set_lang(): return jsonify({'status': 'ok'})
+
+@app.route('/api/set_notify', methods=['POST'])
+def set_notify(): return jsonify({'status': 'ok'})
+
 @app.route('/api/game_state')
 def get_game_state():
     players_list=[]
