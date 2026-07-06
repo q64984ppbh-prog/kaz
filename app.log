@@ -1,9 +1,11 @@
 nohup: ignoring input
-2026-07-06 12:29:33,198 - __main__ - INFO - Game loop started
- * Serving Flask app 'main'
- * Debug mode: off
-2026-07-06 12:29:33,200 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
- * Running on all addresses (0.0.0.0)
- * Running on http://127.0.0.1:8000
- * Running on http://95.85.253.174:8000
-2026-07-06 12:29:33,200 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+Traceback (most recent call last):
+  File "/root/kaz/main.py", line 344, in <module>
+    def deposit_status():
+  File "/root/kaz/venv/lib/python3.10/site-packages/flask/sansio/scaffold.py", line 362, in decorator
+    self.add_url_rule(rule, endpoint, f, **options)
+  File "/root/kaz/venv/lib/python3.10/site-packages/flask/sansio/scaffold.py", line 47, in wrapper_func
+    return f(self, *args, **kwargs)
+  File "/root/kaz/venv/lib/python3.10/site-packages/flask/sansio/app.py", line 657, in add_url_rule
+    raise AssertionError(
+AssertionError: View function mapping is overwriting an existing endpoint function: deposit_status
