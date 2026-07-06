@@ -6,197 +6,92 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>TopGift Crash</title>
+<title>Rocket Crash</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
-body{background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;overflow-x:hidden;min-height:100vh}
-.page{display:none;padding:16px 20px 100px;animation:fadeIn .25s ease}
-.page.active{display:block}
-@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+:root{--bg:#050609;--panel:#1f2228;--panel2:#292b31;--muted:#8a8d96;--blue:#1295ff;--green:#15d36b;--cyan:#11d6b2;--purple:#a457ff;--yellow:#fff200}
+html,body{min-height:100%;background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;overflow-x:hidden}
+body:before{content:"";position:fixed;inset:0;background:radial-gradient(circle at 50% 5%,rgba(28,25,42,.8),transparent 42%),radial-gradient(circle at 30% 35%,rgba(22,44,78,.28),transparent 28%),#050609;z-index:-3}
+body:after{content:"";position:fixed;inset:0;background-image:radial-gradient(circle,#ff6d00 0 1.1px,transparent 1.8px),radial-gradient(circle,#00a7ff 0 1px,transparent 1.7px),radial-gradient(circle,#fff 0 .8px,transparent 1.4px);background-size:112px 150px,168px 132px,92px 118px;background-position:12px 20px,60px 6px,35px 68px;opacity:.28;filter:drop-shadow(2px 0 1px rgba(255,0,0,.55)) drop-shadow(-2px 0 1px rgba(0,170,255,.55));z-index:-2;pointer-events:none}
+button,input,select{font:inherit}.page{display:none;min-height:100vh;padding:24px 24px 110px;animation:fadeIn .22s ease}.page.active{display:block}@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
-.game-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
-.logo{font-size:26px;font-weight:900;color:#0098EA;text-shadow:0 0 20px rgba(0,152,234,.5),0 0 40px rgba(0,152,234,.2);-webkit-text-stroke:1.5px #fff;letter-spacing:1px}
-.balance-pill{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);padding:8px 14px;border-radius:24px;display:flex;align-items:center;gap:6px;backdrop-filter:blur(20px)}
-.balance-pill .amt{font-size:14px;font-weight:700;color:#fff}
-.balance-pill .cur{font-size:10px;color:#888}
+.game-top{display:flex;align-items:center;justify-content:space-between;gap:12px}.top-left,.top-right{display:flex;align-items:center;gap:12px}.pill{height:68px;border-radius:34px;background:rgba(42,44,52,.82);display:flex;align-items:center;gap:12px;padding:0 14px;box-shadow:inset 0 1px rgba(255,255,255,.08),0 10px 30px rgba(0,0,0,.28);backdrop-filter:blur(18px)}.players-pill{background:rgba(13,85,42,.88);color:var(--green);font-size:29px;font-weight:900;min-width:122px;justify-content:center}.round-btn{width:68px;height:68px;border:none;border-radius:50%;background:rgba(43,45,53,.88);display:grid;place-items:center;color:#f4f5f8;box-shadow:inset 0 1px rgba(255,255,255,.09),0 10px 30px rgba(0,0,0,.28)}.round-btn svg{width:32px;height:32px;stroke:currentColor;fill:none;stroke-width:2.4}.balance-pill{height:68px;min-width:226px;justify-content:space-between}.ton-mini{width:46px;height:46px;border-radius:50%;background:linear-gradient(180deg,#27b7ff,#0878df);display:grid;place-items:center;box-shadow:inset 0 1px rgba(255,255,255,.35)}.ton-mini svg{width:29px;height:29px}.bal-num{font-size:31px;font-weight:950;letter-spacing:.5px}.plus-btn{width:50px;height:50px;border:none;border-radius:50%;background:rgba(255,255,255,.17);color:#fff;font-size:34px;font-weight:800;line-height:1}
 
-.game-stage{display:flex;flex-direction:column;align-items:center;padding:20px 0 10px}
-.rocket-area{width:100%;height:280px;position:relative;display:flex;align-items:center;justify-content:center}
-.rocket-area img{width:180px;height:180px;object-fit:contain;position:absolute;filter:drop-shadow(0 0 30px rgba(0,150,255,.3))}
-.overlay-center{position:absolute;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:10}
-.crash-num{font-size:56px;font-weight:900;color:#ff2d55;text-shadow:0 0 50px rgba(255,45,85,.8),0 0 100px rgba(255,45,85,.3);animation:crashPulse .5s infinite alternate}
-.countdown-num{font-size:72px;font-weight:900;color:#fff;text-shadow:0 0 60px rgba(255,255,255,.6);animation:countPulse 1s infinite}
-@keyframes crashPulse{from{transform:scale(1);opacity:.85}to{transform:scale(1.08);opacity:1}}
-@keyframes countPulse{0%{transform:scale(.9);opacity:.4}50%{transform:scale(1.15);opacity:1}100%{transform:scale(.9);opacity:.4}}
+.game-stage{position:relative;height:415px;display:flex;align-items:center;justify-content:center}.rocket-area{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}.rocket-area:before,.rocket-area:after{content:"";position:absolute;width:50px;height:4px;border-radius:4px;background:rgba(210,218,236,.75);left:45%;transform:rotate(-18deg)}.rocket-area:before{top:136px}.rocket-area:after{top:286px}.rocket-area img{position:absolute;width:235px;height:235px;object-fit:contain;filter:drop-shadow(0 22px 24px rgba(0,0,0,.55)) drop-shadow(0 0 18px rgba(255,97,0,.22));transform:rotate(-15deg)}.overlay-center{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:5}.crash-num{font-size:68px;font-weight:950;color:#ff3158;text-shadow:0 0 46px rgba(255,49,88,.9)}.countdown-num{font-size:78px;font-weight:950;text-shadow:0 0 50px rgba(255,255,255,.65)}
+.results-row{display:flex;justify-content:space-between;gap:10px;margin:6px 0 28px;overflow-x:auto;scrollbar-width:none}.results-row::-webkit-scrollbar{display:none}.res-tag{height:52px;min-width:104px;padding:0 18px;border-radius:26px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:950;letter-spacing:.3px;background:rgba(13,77,67,.66);border:3px solid var(--cyan);color:var(--cyan);box-shadow:inset 0 0 20px rgba(0,0,0,.25),0 0 14px rgba(17,214,178,.18)}.res-blue{border-color:#198fff;color:#fff;background:#108dff}.res-pink{border-color:var(--green);color:#54ff42;background:rgba(10,55,30,.72)}.res-gold{border-color:var(--purple);color:#c061ff;background:rgba(63,19,99,.72)}.res-live{border-color:#45a6ff;color:#5db0ff;background:rgba(40,68,95,.72)}
+.bet-btn{width:100%;height:96px;border:none;border-radius:35px;font-size:30px;font-weight:950;color:#fff;margin-bottom:30px;box-shadow:0 18px 40px rgba(0,0,0,.35);transition:.16s}.bet-btn:active{transform:scale(.98)}.btn-bet{background:#1295ff;background-image:radial-gradient(circle at 10% 30%,rgba(255,255,255,.12) 0 2px,transparent 3px);background-size:28px 28px;box-shadow:0 14px 36px rgba(18,149,255,.34)}.btn-cashout{background:#19bf63}.btn-wait{background:#22252c;color:#7e838f}.section-label{display:none}.players-panel{min-height:526px;background:rgba(31,34,40,.96);border-radius:34px;padding:28px;box-shadow:inset 0 1px rgba(255,255,255,.05),0 22px 44px rgba(0,0,0,.25);overflow:hidden}.player-item{display:flex;align-items:center;gap:18px}.p-avatar{width:78px;height:78px;border-radius:50%;object-fit:cover;background:#30333a}.p-name{flex:1;font-size:30px;font-weight:850}.p-bet{display:flex;align-items:center;gap:8px;font-size:25px;font-weight:950}.p-cashed{color:#fff}.p-active{color:#fff}.ton-badge{width:25px;height:25px;border-radius:50%;background:#0d9cf5;display:inline-grid;place-items:center}.ton-badge svg{width:17px;height:17px}.player-meta{display:flex;gap:8px;color:#fff;font-size:21px;font-weight:850;margin-top:2px}.mult-badge{display:inline-flex;align-items:center;gap:5px;color:#fff}.mult-badge:before{content:"";width:24px;height:24px;border-radius:50%;background:#317cce;display:inline-block}.empty-row{height:70px;display:grid;place-items:center;color:#636875;font-weight:800}
 
-.results-row{display:flex;gap:8px;padding:10px 0;overflow-x:auto;scrollbar-width:none;justify-content:flex-start}
-.results-row::-webkit-scrollbar{display:none}
-.res-tag{padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap;backdrop-filter:blur(10px)}
-.res-blue{background:rgba(0,85,204,.4);color:#fff}.res-pink{background:rgba(204,0,102,.4);color:#fff}.res-gold{background:rgba(255,170,0,.5);color:#000}.res-live{background:rgba(0,212,255,.6);color:#000;animation:livePulse .8s infinite}
-@keyframes livePulse{0%,100%{opacity:.7}50%{opacity:1}}
+.profile-wrap{min-height:calc(100vh - 135px);background:#000;margin:-24px -24px 0;padding:24px}.profile-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px}.wallet-id{display:flex;align-items:center;gap:12px;font-size:25px;font-weight:800}.profile-avatar{width:56px;height:56px;border-radius:50%;object-fit:cover;background:linear-gradient(135deg,#4b7cff,#8067ff);display:grid;place-items:center}.wallet-chevron{color:#777}.profile-mini-bal{height:58px;border-radius:31px;background:#202124;display:flex;align-items:center;gap:12px;padding:0 13px 0 20px;font-size:24px;font-weight:850}.profile-balances{display:grid;gap:22px;margin-bottom:42px}.asset-row{display:flex;align-items:center;gap:18px}.asset-icon{width:80px;height:80px;border-radius:50%;display:grid;place-items:center;background:#0b96ff}.asset-icon.star{background:#000;border:1px solid #1f2024;color:var(--yellow)}.asset-icon svg{width:49px;height:49px}.asset-text{display:grid;gap:0}.asset-label{font-size:29px;color:#a2a2a8}.asset-value{font-size:54px;line-height:.95;font-weight:400}.profile-actions{display:flex;gap:18px;justify-content:flex-end;margin:-112px 0 50px}.profile-action-icon{width:80px;height:80px;border:none;border-radius:50%;background:#202124;color:#fff;display:grid;place-items:center}.profile-action-icon svg{width:39px;height:39px;stroke:currentColor;fill:none;stroke-width:2.3}.wide-action{width:100%;height:94px;border:none;border-radius:24px;background:#222;display:flex;align-items:center;justify-content:center;gap:14px;color:#fff;font-size:34px;font-weight:500;margin-bottom:56px}.wide-action.secondary{margin-top:-25px}.wide-action svg{width:34px;height:34px;stroke:currentColor;fill:none;stroke-width:2.4}.divider{height:1px;background:#323232;margin:28px -24px}
+.leader-placeholder{display:grid;place-items:center;min-height:70vh;color:#5c6270;font-size:24px;font-weight:900}.logo{font-size:28px;font-weight:950;color:#fff}.navbar{position:fixed;left:18px;right:18px;bottom:14px;height:78px;display:flex;justify-content:space-around;align-items:center;background:rgba(31,34,40,.86);backdrop-filter:blur(26px);border:1px solid rgba(255,255,255,.08);border-radius:28px;z-index:150}.nav-item{border:none;background:none;color:#737987;font-size:11px;font-weight:800;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 14px;border-radius:18px}.nav-item.active{color:#1295ff;background:rgba(18,149,255,.12)}.nav-item svg{width:23px;height:23px;stroke:currentColor;fill:none;stroke-width:2}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:200;display:none;align-items:flex-end;justify-content:center;backdrop-filter:blur(8px)}.modal-overlay.active{display:flex}.modal-sheet{width:100%;max-width:760px;background:#151820;border-radius:30px 30px 0 0;padding:24px 24px 38px;max-height:82vh;overflow:auto}.modal-grabber{width:54px;height:6px;border-radius:5px;background:#3a3e48;margin:0 auto 18px}.modal-heading{text-align:center;font-size:24px;font-weight:900;margin-bottom:18px}.modal-field{width:100%;height:64px;border:none;border-radius:20px;background:#242832;color:#fff;text-align:center;font-size:25px;font-weight:800;outline:none}.quick-bets{display:flex;gap:10px;margin:14px 0}.quick-bet,.modal-cta{border:none;border-radius:18px;background:#1295ff;color:#fff;font-weight:900}.quick-bet{flex:1;height:52px;font-size:18px}.modal-cta{width:100%;height:62px;font-size:20px}.deposit-card{background:#242832;border-radius:18px;padding:16px;margin-top:14px;line-height:1.6}.deposit-addr{display:block;color:#52ff75;font-family:monospace;word-break:break-all;background:#11141a;border-radius:12px;padding:10px;margin:8px 0}.tx-row,.settings-row{display:flex;justify-content:space-between;align-items:center;padding:16px 0;border-bottom:1px solid rgba(255,255,255,.07)}.settings-select{background:#242832;color:#fff;border:none;border-radius:12px;padding:10px}.ios-switch{width:58px;height:34px;border-radius:18px;background:#333;position:relative}.ios-switch:after{content:"";position:absolute;width:30px;height:30px;left:2px;top:2px;background:#fff;border-radius:50%;transition:.2s}.ios-switch.on{background:#1295ff}.ios-switch.on:after{left:26px}
+/* Telegram WebApp compact mobile layout. */
+@media(max-width:900px){
+  .page{padding:8px 12px 72px;min-height:100svh;overflow:hidden}
+  .game-top{gap:7px;align-items:center}.top-left{gap:7px;flex:0 0 auto}.pill{height:44px;border-radius:999px}
+  .players-pill{min-width:78px;font-size:20px;padding:0 12px}.players-pill svg{width:19px;height:19px}.round-btn{width:44px;height:44px}.round-btn svg{width:22px;height:22px}
+  .balance-pill{flex:1 1 auto;min-width:0;max-width:none;overflow:hidden;padding:0 7px;gap:7px}.ton-mini{width:32px;height:32px;flex:0 0 auto}.ton-mini svg{width:60%;height:60%}.bal-num{font-size:22px;white-space:nowrap}.plus-btn{width:32px;height:32px;font-size:22px;flex:0 0 auto}
+  .game-stage{height:min(31svh,250px)}.rocket-area img{width:clamp(145px,42vw,205px);height:clamp(145px,42vw,205px)}.rocket-area:before{top:25%;width:32px;height:3px}.rocket-area:after{top:70%;width:32px;height:3px}.crash-num{font-size:36px}.countdown-num{font-size:44px}
+  .results-row{justify-content:flex-start;gap:7px;margin:0 0 10px;padding-bottom:2px;overflow-x:auto}.res-tag{height:34px;min-width:66px;font-size:17px;border-width:2px;padding:0 10px}
+  .bet-btn{height:54px;border-radius:18px;font-size:24px;margin-bottom:8px}.players-panel{min-height:86px;max-height:86px;padding:10px;border-radius:18px}.p-avatar{width:38px;height:38px}.p-name{font-size:15px}.p-bet{font-size:14px}.player-meta{font-size:12px}.ton-badge{width:16px;height:16px}.ton-badge svg{width:11px;height:11px}
+  .navbar{left:12px;right:12px;bottom:calc(8px + env(safe-area-inset-bottom));height:58px;border-radius:20px}.nav-item{font-size:11px;padding:6px 10px}.nav-item svg{width:20px;height:20px}
+  .profile-wrap{min-height:100svh;margin:-8px -12px 0;padding:16px 15px 86px;overflow:hidden}.profile-head{gap:8px;margin-bottom:28px}.wallet-id{min-width:0;flex:1;font-size:24px}.wallet-id span{min-width:0;overflow:hidden;text-overflow:ellipsis}.profile-avatar{width:46px;height:46px;flex:0 0 auto}.profile-mini-bal{height:42px;font-size:20px;padding:0 8px;gap:6px;flex:0 1 auto;max-width:38vw;overflow:hidden}.profile-mini-bal .plus-btn{width:28px!important;height:28px!important;font-size:19px!important}.profile-mini-bal .ton-mini{width:24px!important;height:24px!important}
+  .profile-balances{gap:0;margin-bottom:60px}.asset-row{gap:14px}.asset-icon{width:62px;height:62px}.asset-icon svg{width:54%;height:54%}.asset-label{font-size:27px;font-weight:800}.asset-value{font-size:48px;font-weight:500}.profile-actions{justify-content:flex-end;margin:-74px 0 28px;gap:14px}.profile-action-icon{width:56px;height:56px}.profile-action-icon svg{width:42%;height:42%}.wide-action{height:58px;border-radius:18px;font-size:26px;font-weight:700;margin-bottom:22px}.wide-action.secondary{margin-top:0}.wide-action svg{width:24px;height:24px}.divider{margin:0 -15px 10px}
+}
+@media(max-height:780px){.game-stage{height:28svh}.players-panel{display:none}.bet-btn{height:50px;font-size:22px}.results-row{margin-bottom:8px}.navbar{height:56px}.page{padding-bottom:68px}}
 
-.bet-btn{width:100%;padding:16px;border:none;border-radius:20px;font-size:16px;font-weight:700;cursor:pointer;text-transform:uppercase;letter-spacing:.5px;transition:all .2s;margin:10px 0}
-.bet-btn:active{transform:scale(.97)}
-.btn-bet{background:#0098EA;color:#fff;box-shadow:0 8px 30px rgba(0,152,234,.35)}
-.btn-cashout{background:#00cc66;color:#fff;box-shadow:0 8px 30px rgba(0,204,102,.35)}
-.btn-wait{background:rgba(255,255,255,.04);color:rgba(255,255,255,.15);pointer-events:none}
-
-.players-panel{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:20px;max-height:140px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent;backdrop-filter:blur(20px)}
-.player-item{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.04)}
-.player-item:last-child{border-bottom:none}
-.p-avatar{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.08);object-fit:cover;flex-shrink:0}
-.p-name{flex:1;font-size:13px;color:#bbb;font-weight:500}
-.p-bet{display:flex;align-items:center;gap:6px;font-weight:700;font-size:13px}
-.p-cashed{color:#00ff88}.p-active{color:#fff}
-.ton-badge{width:20px;height:20px;border-radius:50%;background:#0098EA;display:inline-flex;align-items:center;justify-content:center}
-.ton-badge svg{width:13px;height:13px}
-.section-label{font-size:11px;color:#444;text-transform:uppercase;letter-spacing:2px;padding:12px 0 6px}
-
-.profile-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
-.profile-top{display:flex;align-items:center;gap:14px;margin-bottom:20px}
-.profile-avatar{width:52px;height:52px;border-radius:50%;border:2px solid rgba(255,255,255,.15);object-fit:cover}
-.profile-name-block{display:flex;flex-direction:column}
-.profile-name{font-size:18px;font-weight:700}
-.profile-sub{font-size:11px;color:#666}
-.ton-card{display:flex;align-items:center;gap:12px;padding:18px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:22px;margin-bottom:14px;backdrop-filter:blur(20px)}
-.ton-circle{width:44px;height:44px;border-radius:50%;background:#0098EA;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 0 20px rgba(0,152,234,.3)}
-.ton-circle svg{width:26px;height:26px}
-.ton-info{flex:1}.ton-label{font-size:12px;color:#888}.ton-value{font-size:28px;font-weight:800;color:#fff}
-.action-duo{display:flex;gap:12px;margin-bottom:16px}
-.action-btn{flex:1;padding:14px;border-radius:18px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:#aaa;font-size:14px;font-weight:600;cursor:pointer;text-align:center;transition:all .2s;backdrop-filter:blur(10px)}
-.action-btn:active{background:#0098EA;color:#fff;border-color:#0098EA;transform:scale(.97)}
-.icon-pair{display:flex;gap:18px}
-.icon-circle{width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .2s}
-.icon-circle:active{background:rgba(0,152,234,.15);border-color:#0098EA;transform:scale(.94)}
-.icon-circle svg{width:22px;height:22px;stroke:#999;fill:none}
-
-.leader-placeholder{display:flex;align-items:center;justify-content:center;min-height:60vh;color:#333;font-size:18px;font-weight:600}
-
-.navbar{position:fixed;left:18px;right:18px;bottom:14px;height:74px;display:flex;justify-content:space-around;align-items:center;background:rgba(255,255,255,.06);backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);border:1px solid rgba(255,255,255,.1);border-radius:28px;box-shadow:0 12px 40px rgba(0,0,0,.4),inset 0 1px rgba(255,255,255,.12);z-index:150;padding:0 10px}
-.nav-item{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:8px 14px;border-radius:18px;transition:all .25s;color:#666;border:none;background:none;font-size:10px;font-weight:600}
-.nav-item.active{color:#0098EA;background:rgba(0,152,234,.12)}
-.nav-item svg{width:22px;height:22px;stroke:currentColor;fill:none;transition:all .25s}
-.nav-item.active svg{filter:drop-shadow(0 0 8px rgba(0,152,234,.5))}
-
-.modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:200;display:none;align-items:flex-end;justify-content:center;backdrop-filter:blur(8px)}
-.modal-overlay.active{display:flex}
-.modal-sheet{width:100%;max-width:430px;background:rgba(15,15,30,.95);border-radius:26px 26px 0 0;padding:24px 20px 34px;animation:slideUp .3s ease;border-top:1px solid rgba(255,255,255,.08);max-height:80vh;overflow-y:auto}
-@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
-.modal-grabber{width:40px;height:5px;background:rgba(255,255,255,.2);border-radius:3px;margin:0 auto 14px}
-.modal-heading{font-size:17px;font-weight:700;text-align:center;margin-bottom:16px}
-.modal-field{padding:16px;border-radius:18px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:#fff;font-size:20px;text-align:center;outline:none;font-weight:600}
-.modal-field:focus{border-color:#0098EA}
-.quick-bets{display:flex;gap:10px;justify-content:center;margin:12px 0}
-.quick-bet{padding:12px 20px;border-radius:16px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:#aaa;font-size:14px;font-weight:600;cursor:pointer;transition:all .15s}
-.quick-bet:active{background:#0098EA;color:#fff;border-color:#0098EA}
-.modal-cta{width:100%;padding:16px;border:none;border-radius:18px;background:#0098EA;color:#fff;font-size:16px;font-weight:700;cursor:pointer;text-transform:uppercase}
-.deposit-card{background:rgba(255,255,255,.04);border-radius:16px;padding:16px;font-size:13px;line-height:1.7;margin-top:12px}
-.deposit-addr{color:#0f0;font-family:monospace;font-size:11px;word-break:break-all;background:rgba(0,0,0,.3);padding:8px;border-radius:10px;margin:8px 0}
-.tx-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:13px}
-.tx-type{color:#999}.tx-amount{font-weight:700}.tx-date{color:#555;font-size:10px}
-.settings-row{display:flex;justify-content:space-between;align-items:center;padding:16px 0;border-bottom:1px solid rgba(255,255,255,.04)}
-.settings-label{font-size:15px;color:#ccc}
-.ios-switch{width:52px;height:30px;border-radius:16px;background:#2b2b2b;cursor:pointer;position:relative;transition:all .3s}
-.ios-switch.on{background:#0098EA}
-.ios-switch::after{content:'';position:absolute;width:26px;height:26px;border-radius:50%;background:#fff;top:2px;left:2px;transition:all .3s;box-shadow:0 2px 6px rgba(0,0,0,.3)}
-.ios-switch.on::after{left:24px}
-.settings-select{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);color:#fff;padding:8px 14px;border-radius:12px;font-size:13px;outline:none}
 </style>
 </head>
 <body>
 
 <div id="pageGame" class="page active">
-<div class="game-header"><div class="logo">TopGift</div><div class="balance-pill"><span class="amt" id="bal">100.00</span><span class="cur">TON</span></div></div>
-<div class="game-stage">
-<div class="rocket-area" id="rocketArea">
-<img id="flyGif" src="/static/gifs/fly.gif" style="display:none">
-<img id="crushGif" src="/static/gifs/crush.gif" style="display:none">
-<div class="overlay-center" id="gameOverlay" style="display:none"><div class="crash-num" id="crashNum" style="display:none"></div><div class="countdown-num" id="cdNum" style="display:none"></div></div>
-</div>
-</div>
-<div class="results-row" id="resBar"></div>
-<button class="bet-btn btn-wait" id="actionBtn" disabled>Ожидание</button>
-<div class="section-label">Игроки</div>
-<div class="players-panel" id="playersPanel"></div>
+  <div class="game-top">
+    <div class="top-left"><div class="pill players-pill"><svg viewBox="0 0 24 24" width="29" height="29" fill="currentColor"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-4.42 0-8 2.02-8 4.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5C20 16.02 16.42 14 12 14Z"/></svg><span id="onlineCount">92</span></div><button class="round-btn" onclick="showSettingsModal()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6V20a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1H4a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06A2 2 0 1 1 7.12 4.2l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6V4a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.22.35.43.69.6 1H20a2 2 0 1 1 0 4h-.09c-.17.31-.38.65-.51 1Z"/></svg></button></div>
+    <div class="pill balance-pill"><span class="ton-mini"><svg viewBox="0 0 56 56"><path d="M37.56 15.63H18.44c-3.52 0-5.74 3.79-3.98 6.86l11.8 20.45c.77 1.34 2.7 1.34 3.47 0l11.8-20.45c1.77-3.06-.46-6.86-3.97-6.86Zm-11.31 21.18l-8.77-16.07c-.4-.71.1-1.62.95-1.62h7.82v17.69Zm12.26-16.07l-8.77 16.07V19.12h7.82c.85 0 1.36.91.95 1.62Z" fill="#fff"/></svg></span><span class="bal-num" id="bal">0.00</span><button class="plus-btn" onclick="openDeposit()">+</button></div>
+  </div>
+  <div class="game-stage"><div class="rocket-area" id="rocketArea"><img id="flyGif" src="/static/gifs/fly.gif"><img id="crushGif" src="/static/gifs/crush.gif" style="display:none"><div class="overlay-center" id="gameOverlay" style="display:none"><div class="crash-num" id="crashNum" style="display:none"></div><div class="countdown-num" id="cdNum" style="display:none"></div></div></div></div>
+  <div class="results-row" id="resBar"></div>
+  <button class="bet-btn btn-wait" id="actionBtn" disabled>Ожидание</button>
+  <div class="section-label">Игроки</div><div class="players-panel" id="playersPanel"></div>
 </div>
 
-<div id="pageLeader" class="page"><div class="game-header"><div class="logo">TopGift</div></div><div class="leader-placeholder">В разработке</div></div>
+<div id="pageLeader" class="page"><div class="game-top"><div class="logo">Rocket Crash</div></div><div class="leader-placeholder">В разработке</div></div>
 
 <div id="pageProfile" class="page">
-<div class="profile-header"><div class="logo" style="font-size:20px">TopGift</div><div class="balance-pill"><span class="amt" id="profBal">100.00</span><span class="cur">TON</span><button style="width:24px;height:24px;border-radius:50%;background:#0098EA;border:none;color:#fff;font-size:16px;font-weight:700;cursor:pointer;margin-left:6px" onclick="openDeposit()">+</button></div></div>
-<div class="profile-top"><img class="profile-avatar" id="profAvatar" src=""><div class="profile-name-block"><div class="profile-name" id="profName">Player</div><div class="profile-sub">TopGift Member</div></div></div>
-<div class="ton-card"><div class="ton-circle"><svg viewBox="0 0 56 56"><path d="M37.56 15.63H18.44c-3.52 0-5.74 3.79-3.98 6.86l11.8 20.45c.77 1.34 2.7 1.34 3.47 0l11.8-20.45c1.77-3.06-.46-6.86-3.97-6.86h.01zm-11.31 21.18l-2.57-4.98-6.2-11.09c-.4-.71.1-1.62.95-1.62h7.82v17.69zm12.26-16.07l-6.2 11.1-2.57 4.97V19.12h7.82c.85 0 1.36.91.95 1.62z" fill="#fff"/></svg></div><div class="ton-info"><div class="ton-label">Toncoin</div><div class="ton-value" id="profBalBig">100.00</div></div></div>
-<div class="action-duo"><button class="action-btn" onclick="openDeposit()">Пополнить</button><button class="action-btn">Вывести</button></div>
-<div class="icon-pair"><div class="icon-circle" onclick="showTxModal()"><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path d="M12 21c4.97 0 9-4.03 9-9s-4.03-9-9-9-9 4.03-9 9 4.03 9 9 9z"/><path d="M12 6v6"/><path d="M16.24 16.24L12 12"/></svg></div><div class="icon-circle" onclick="showSettingsModal()"><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12.9 3.06A3.94 3.94 0 0 0 12 3c-.47 0-.7 0-.9.06-.3.09-.57.27-.76.51-.13.17-.22.39-.4.82a2.29 2.29 0 0 1-1.57.73l-.57-.19c-.4-.13-.6-.2-.8-.21a1.82 1.82 0 0 0-.84.2 1.76 1.76 0 0 0-.62.55c-.32.32-.48.48-.58.66-.15.27-.22.58-.18.88.02.21.1.42.27.84.26.66 0 1.42-.6 1.78l-.28.17c-.42.25-.64.38-.79.56a1.88 1.88 0 0 0-.3.53 1.76 1.76 0 0 0 .07.97c.08.21.27.4.59.79.3.3.47.47.67.57a1.82 1.82 0 0 0 .77.15l.79-.02c.62-.15 1.25.06 1.57.52l.08.22c.19.51.35.77.52.93a2.94 2.94 0 0 0 2.76.52c.3-.09.57-.27.76-.51.13-.17.22-.39.4-.82.25-.62.88-.94 1.57-.73l.57.19c.4.13.6.2.8.21a1.82 1.82 0 0 0 .84-.2 1.76 1.76 0 0 0 .62-.55c.32-.32.48-.48.58-.66.15-.27.22-.58.18-.88-.02-.21-.1-.42-.27-.84-.26-.66 0-1.42.6-1.78l.28-.17c.42-.25.64-.38.79-.56a1.88 1.88 0 0 0 .3-.53 1.76 1.76 0 0 0-.07-.97 1.76 1.76 0 0 0-.59-.79c-.3-.3-.47-.47-.67-.57a1.82 1.82 0 0 0-.77-.15l-.79.02c-.62.15-1.25-.06-1.57-.52l-.08-.22a2.94 2.94 0 0 0-2.76-.52z"/></svg></div></div>
+  <div class="profile-wrap">
+    <div class="profile-head"><div class="wallet-id"><div class="profile-avatar" id="profAvatarFallback">K</div><span id="profName">UQCv8Hmrha</span><span class="wallet-chevron">⌄</span></div><div class="profile-mini-bal"><span>0</span><span class="ton-mini" style="width:26px;height:26px"><svg viewBox="0 0 56 56"><path d="M37.56 15.63H18.44c-3.52 0-5.74 3.79-3.98 6.86l11.8 20.45c.77 1.34 2.7 1.34 3.47 0l11.8-20.45c1.77-3.06-.46-6.86-3.97-6.86Zm-11.31 21.18l-8.77-16.07c-.4-.71.1-1.62.95-1.62h7.82v17.69Zm12.26-16.07l-8.77 16.07V19.12h7.82c.85 0 1.36.91.95 1.62Z" fill="#fff"/></svg></span><button class="plus-btn" style="width:31px;height:31px;font-size:22px" onclick="openDeposit()">+</button></div></div>
+    <div class="profile-balances"><div class="asset-row"><div class="asset-icon"><svg viewBox="0 0 56 56"><path d="M37.56 15.63H18.44c-3.52 0-5.74 3.79-3.98 6.86l11.8 20.45c.77 1.34 2.7 1.34 3.47 0l11.8-20.45c1.77-3.06-.46-6.86-3.97Zm-11.31 21.18l-8.77-16.07c-.4-.71.1-1.62.95-1.62h7.82v17.69Zm12.26-16.07l-8.77 16.07V19.12h7.82c.85 0 1.36.91.95 1.62Z" fill="#fff"/></svg></div><div class="asset-text"><div class="asset-label">Toncoin</div><div class="asset-value" id="profBalBig">0</div></div></div></div>
+    <div class="profile-actions"><button class="profile-action-icon" onclick="showTxModal()"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/><path d="M12 7v5l3 3"/></svg></button><button class="profile-action-icon" onclick="showSettingsModal()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6V20a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1H4a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06A2 2 0 1 1 7.12 4.2l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6V4a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.22.35.43.69.6 1H20a2 2 0 1 1 0 4h-.09c-.17.31-.38.65-.51 1Z"/></svg></button></div>
+    <button class="wide-action" onclick="openDeposit()"><span>＋</span>Пополнить</button><div class="divider"></div><button class="wide-action secondary" onclick="tg.showAlert('Вывод скоро будет доступен')"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Вывести</button>
+  </div>
 </div>
 
 <div class="modal-overlay" id="betModal"><div class="modal-sheet"><div class="modal-grabber"></div><div class="modal-heading">Сумма ставки</div><input type="number" class="modal-field" id="betAmt" placeholder="0.00" step="0.1" min="0.1"><div class="quick-bets"><button class="quick-bet" onclick="setQuickBet(1)">1</button><button class="quick-bet" onclick="setQuickBet(5)">5</button><button class="quick-bet" onclick="setQuickBet(10)">10</button></div><button class="modal-cta" onclick="submitBet()">Сделать ставку</button></div></div>
-
 <div class="modal-overlay" id="depModal"><div class="modal-sheet"><div class="modal-grabber"></div><div class="modal-heading">Пополнение TON</div><input type="number" class="modal-field" id="depAmt" placeholder="Сумма TON" step="1" min="1"><button class="modal-cta" onclick="createDep()">Пополнить</button><div id="depInfo" style="display:none"></div></div></div>
-
 <div class="modal-overlay" id="txModal"><div class="modal-sheet"><div class="modal-grabber"></div><div class="modal-heading">Транзакции</div><div id="txList"></div></div></div>
-
-<div class="modal-overlay" id="setModal"><div class="modal-sheet"><div class="modal-grabber"></div><div class="modal-heading">Настройки</div><div class="settings-row"><span class="settings-label">Язык</span><select class="settings-select" id="langSel" onchange="chLang(this.value)"><option value="ru">Русский</option><option value="en">English</option></select></div><div class="settings-row"><span class="settings-label">Уведомления</span><div class="ios-switch on" id="notifToggle" onclick="tglNotif()"></div></div></div></div>
-
-<div class="navbar">
-<button class="nav-item" id="navLeader" onclick="showPage('leader')"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 3h10l2 6-7 4-7-4 2-6z"/></svg>Лидерборд</button>
-<button class="nav-item active" id="navGame" onclick="showPage('game')"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>Игры</button>
-<button class="nav-item" id="navProfile" onclick="showPage('profile')"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Профиль</button>
-</div>
-
+<div class="modal-overlay" id="setModal"><div class="modal-sheet"><div class="modal-grabber"></div><div class="modal-heading">Настройки</div><div class="settings-row"><span>Язык</span><select class="settings-select" id="langSel" onchange="chLang(this.value)"><option value="ru">Русский</option><option value="en">English</option></select></div><div class="settings-row"><span>Уведомления</span><div class="ios-switch on" id="notifToggle" onclick="tglNotif()"></div></div></div></div>
+<div class="navbar"><button class="nav-item" id="navLeader" onclick="showPage('leader')"><svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 3h10l2 6-7 4-7-4 2-6z"/></svg>Лидерборд</button><button class="nav-item active" id="navGame" onclick="showPage('game')"><svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>Игры</button><button class="nav-item" id="navProfile" onclick="showPage('profile')"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Профиль</button></div>
 <script>
-const tg=window.Telegram.WebApp;tg.expand();tg.ready();
+const tg=window.Telegram?.WebApp||{expand(){},ready(){},showAlert:alert,initDataUnsafe:{}};tg.expand();tg.ready();
 const u=tg.initDataUnsafe?.user||{};const uid=u.id||Math.floor(Math.random()*1e6);const ava=u.photo_url||'';
-let bal=100,hasBet=false,curBet=0,gs='countdown',poll=null,cto=null,lastStatus=null;
+let bal=0,hasBet=false,curBet=0,gs='countdown',poll=null,cto=null,lastStatus=null;
 const fly=document.getElementById('flyGif'),crush=document.getElementById('crushGif'),cv=document.getElementById('crashNum'),cdv=document.getElementById('cdNum'),go=document.getElementById('gameOverlay'),ab=document.getElementById('actionBtn'),pl=document.getElementById('playersPanel'),bm=document.getElementById('betModal'),dm=document.getElementById('depModal'),tm=document.getElementById('txModal'),sm=document.getElementById('setModal');
-const tonB='<span class="ton-badge"><svg viewBox="0 0 56 56"><path d="M37.56 15.63H18.44c-3.52 0-5.74 3.79-3.98 6.86l11.8 20.45c.77 1.34 2.7 1.34 3.47 0l11.8-20.45c1.77-3.06-.46-6.86-3.97-6.86h.01zm-11.31 21.18l-2.57-4.98-6.2-11.09c-.4-.71.1-1.62.95-1.62h7.82v17.69zm12.26-16.07l-6.2 11.1-2.57 4.97V19.12h7.82c.85 0 1.36.91.95 1.62z" fill="#fff"/></svg></span>';
-
+const tonB='<span class="ton-badge"><svg viewBox="0 0 56 56"><path d="M37.56 15.63H18.44c-3.52 0-5.74 3.79-3.98 6.86l11.8 20.45c.77 1.34 2.7 1.34 3.47 0l11.8-20.45c1.77-3.06-.46-6.86-3.97-6.86Zm-11.31 21.18l-8.77-16.07c-.4-.71.1-1.62.95-1.62h7.82v17.69Zm12.26-16.07l-8.77 16.07V19.12h7.82c.85 0 1.36.91.95 1.62Z" fill="#fff"/></svg></span>';
 function resetOverlay(){fly.style.display='none';crush.style.display='none';cv.style.display='none';cdv.style.display='none';go.style.display='none'}
-function ub(){document.getElementById('bal').textContent=bal.toFixed(2);document.getElementById('profBal').textContent=bal.toFixed(2);document.getElementById('profBalBig').textContent=bal.toFixed(2)}
-
-async function init(){
-    const r=await fetch('/api/init',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:uid,username:u.username||'',first_name:u.first_name||'',last_name:u.last_name||'',avatar_url:ava})});
-    const d=await r.json();bal=d.balance;hasBet=d.has_bet;curBet=d.current_bet;
-    document.getElementById('profAvatar').src=ava;document.getElementById('profName').textContent=(d.first_name||'')+' '+(d.last_name||'')||'Player';
-    document.getElementById('langSel').value=d.lang;document.getElementById('notifToggle').className='ios-switch'+(d.notify?' on':'');
-    ub();upd(d.game_state);sp();
-}
-
-function upd(s){
-    if(lastStatus!==s.status)resetOverlay();
-    lastStatus=s.status;gs=s.status;
-    if(s.status==='flying'){fly.style.display='block';if(hasBet){ab.className='bet-btn btn-cashout';ab.textContent='Забрать';ab.disabled=false;ab.onclick=co}else{ab.className='bet-btn btn-wait';ab.textContent='Ожидание';ab.disabled=true}}
-    else if(s.status==='crashed'){crush.style.display='block';go.style.display='flex';ab.className='bet-btn btn-wait';ab.textContent='Ожидание';ab.disabled=true;hasBet=false;curBet=0;if(cto)clearTimeout(cto);cto=setTimeout(()=>{crush.style.display='none';go.style.display='none';cv.style.display='none'},2200)}
-    else if(s.status==='countdown'){go.style.display='flex';cdv.style.display='block';cdv.textContent=s.countdown;cv.style.display='none';if(hasBet){ab.className='bet-btn btn-wait';ab.textContent='Ожидание...';ab.disabled=true}else{ab.className='bet-btn btn-bet';ab.textContent='Сделать ставку';ab.disabled=false;ab.onclick=()=>bm.classList.add('active')}}
-    if(s.status==='crashed'){go.style.display='flex';cv.style.display='block';cv.textContent='x'+s.crash_point.toFixed(2)}
-    ur(s.last_results||[],s);up(s.players||[]);
-}
-
-function ur(r,s){document.getElementById('resBar').innerHTML=(s.status==='flying'&&s.multiplier>1?`<span class="res-tag res-live">x${s.multiplier.toFixed(2)}</span>`:'')+r.map(x=>`<span class="res-tag ${x>=4?'res-gold':x>=2?'res-pink':'res-blue'}">x${x.toFixed(2)}</span>`).join('')}
-function up(pp){pl.innerHTML=pp.length?pp.map(p=>`<div class="player-item">${p.avatar?`<img class="p-avatar" src="${p.avatar}">`:`<div class="p-avatar" style="display:flex;align-items:center;justify-content:center;color:#555;font-size:12px">${(p.name||'?')[0]}</div>`}<div class="p-name">${p.name}</div><div class="p-bet ${p.cashed_out?'p-cashed':'p-active'}">${p.cashed_out?'x'+p.multiplier.toFixed(2):p.bet.toFixed(2)}${tonB}</div></div>`).join(''):'<div class="player-item" style="justify-content:center;color:#333;font-size:12px">Нет активных игроков</div>'}
-
+function ub(){document.getElementById('bal').textContent=bal.toFixed(2);document.getElementById('profBalBig').textContent=Math.round(bal).toString()}
+async function init(){const r=await fetch('/api/init',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:uid,username:u.username||'',first_name:u.first_name||'',last_name:u.last_name||'',avatar_url:ava})});const d=await r.json();bal=d.balance;hasBet=d.has_bet;curBet=d.current_bet;const nm=((d.first_name||'')+' '+(d.last_name||'')).trim()||u.username||'UQCv8Hmrha';document.getElementById('profName').textContent=nm;if(ava){document.getElementById('profAvatarFallback').style.background=`url(${ava}) center/cover`}else document.getElementById('profAvatarFallback').textContent=(nm[0]||'K').toUpperCase();document.getElementById('langSel').value=d.lang||'ru';document.getElementById('notifToggle').className='ios-switch'+(d.notify?' on':'');ub();upd(d.game_state);sp()}
+function upd(s){if(lastStatus!==s.status)resetOverlay();lastStatus=s.status;gs=s.status;if(s.status==='flying'){fly.style.display='block';if(hasBet){ab.className='bet-btn btn-cashout';ab.textContent='Забрать';ab.disabled=false;ab.onclick=co}else{ab.className='bet-btn btn-wait';ab.textContent='Ожидание';ab.disabled=true}}else if(s.status==='crashed'){crush.style.display='block';go.style.display='flex';ab.className='bet-btn btn-wait';ab.textContent='Ожидание';ab.disabled=true;hasBet=false;curBet=0;if(cto)clearTimeout(cto);cto=setTimeout(()=>{crush.style.display='none';go.style.display='none';cv.style.display='none'},2200)}else if(s.status==='countdown'){fly.style.display='block';go.style.display='flex';cdv.style.display='block';cdv.textContent=s.countdown;cv.style.display='none';if(hasBet){ab.className='bet-btn btn-wait';ab.textContent='Ожидание...';ab.disabled=true}else{ab.className='bet-btn btn-bet';ab.textContent='Сделать ставку';ab.disabled=false;ab.onclick=()=>bm.classList.add('active')}}if(s.status==='crashed'){go.style.display='flex';cv.style.display='block';cv.textContent='x'+Number(s.crash_point||1).toFixed(2)}ur(s.last_results||[],s);up(s.players||[])}
+function ur(r,s){const demo=[1.09,2.44,1.00,1.74,3.83,3.89];const arr=r.length?r:demo;document.getElementById('resBar').innerHTML=(s.status==='flying'&&s.multiplier>1?`<span class="res-tag res-live">${s.multiplier.toFixed(2)}</span>`:'')+arr.slice(0,6).map((x,i)=>`<span class="res-tag ${i===0?'res-blue':x>=3?'res-gold':x>=2?'res-pink':'res-live'}">${i===0?'x':''}${Number(x).toFixed(2)}</span>`).join('')}
+function up(pp){if(!pp.length)pp=[{name:'Mzfrvna)',avatar:'',bet:3.14,cashed_out:true,multiplier:1.09}];pl.innerHTML=pp.map(p=>`<div class="player-item">${p.avatar?`<img class="p-avatar" src="${p.avatar}">`:`<div class="p-avatar" style="background:linear-gradient(135deg,#f6c9e3,#6960a6)"></div>`}<div class="p-name"><div>${p.name}</div><div class="player-meta">${tonB}<span>${Number(p.bet||0).toFixed(2)}</span><span class="mult-badge">x${Number(p.multiplier||1.09).toFixed(2)}</span></div></div><div class="p-bet ${p.cashed_out?'p-cashed':'p-active'}">${tonB}<span>${(Number(p.bet||0)*Number(p.multiplier||1)).toFixed(2)}</span></div></div>`).join('')}
 function setQuickBet(a){document.getElementById('betAmt').value=a}
 async function submitBet(){const a=parseFloat(document.getElementById('betAmt').value);if(!a||a<=0){tg.showAlert('Введите сумму');return}if(a>bal){tg.showAlert('Недостаточно средств');return}const r=await fetch('/api/place_bet',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:uid,amount:a})});const d=await r.json();if(d.status==='ok'){bal=d.balance;hasBet=true;curBet=a;ub();ab.className='bet-btn btn-wait';ab.textContent='Ожидание...';ab.disabled=true;bm.classList.remove('active');document.getElementById('betAmt').value=''}else tg.showAlert(d.message||'Ошибка')}
 async function co(){const r=await fetch('/api/cashout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:uid})});const d=await r.json();if(d.status==='ok'){bal=d.balance;hasBet=false;curBet=0;ub();ab.className='bet-btn btn-wait';ab.textContent='Ожидание';ab.disabled=true;tg.showAlert(`+${d.winnings.toFixed(2)} TON`)}else{hasBet=false;curBet=0}}
-
-async function createDep(){const a=parseFloat(document.getElementById('depAmt').value);if(!a||a<=0){tg.showAlert('Введите сумму');return}const r=await fetch('/api/create_deposit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:uid,amount:a})});const d=await r.json();if(d.status==='ok'){document.getElementById('depInfo').style.display='block';document.getElementById('depInfo').innerHTML=`<div class="deposit-card"><b>Отправьте ${d.amount_ton} TON</b><br><span class="deposit-addr">${d.admin_wallet}</span>Комментарий: <b style="color:#0f0">${d.comment}</b><br><button class="modal-cta" style="margin-top:10px" onclick="window.open('${d.tonkeeper_url}','_blank')">Открыть Tonkeeper</button></div>`;let checks=0;const iv=setInterval(async()=>{checks++;const sr=await fetch('/api/deposit_status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deposit_id:d.deposit_id})});const sd=await sr.json();if(sd.status==='paid'){clearInterval(iv);bal+=a;ub();dm.classList.remove('active');document.getElementById('depInfo').style.display='none';tg.showAlert('Баланс пополнен!')}if(checks>180)clearInterval(iv)},5000)}else tg.showAlert(d.message||'Ошибка')}
-
-function showPage(p){
-    document.querySelectorAll('.page').forEach(pg=>pg.classList.remove('active'));
-    document.getElementById('page'+p.charAt(0).toUpperCase()+p.slice(1)).classList.add('active');
-    document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
-    document.getElementById('nav'+p.charAt(0).toUpperCase()+p.slice(1)).classList.add('active');
-    if(p==='profile')ub();
-}
+async function createDep(){const a=parseFloat(document.getElementById('depAmt').value);if(!a||a<=0){tg.showAlert('Введите сумму');return}const r=await fetch('/api/create_deposit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:uid,amount:a})});const d=await r.json();if(d.status==='ok'){document.getElementById('depInfo').style.display='block';document.getElementById('depInfo').innerHTML=`<div class="deposit-card"><b>Отправьте ${d.amount_ton} TON</b><span class="deposit-addr">${d.admin_wallet}</span>Комментарий: <b style="color:#52ff75">${d.comment}</b></div>`}else tg.showAlert(d.message||'Ошибка')}
+function showPage(p){document.querySelectorAll('.page').forEach(pg=>pg.classList.remove('active'));document.getElementById('page'+p.charAt(0).toUpperCase()+p.slice(1)).classList.add('active');document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));document.getElementById('nav'+p.charAt(0).toUpperCase()+p.slice(1)).classList.add('active');if(p==='profile')ub()}
 function openDeposit(){dm.classList.add('active')}
-async function showTxModal(){tm.classList.add('active');const r=await fetch('/api/transactions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:uid})});const d=await r.json();document.getElementById('txList').innerHTML=[...d.transactions.map(t=>`<div class="tx-row"><span class="tx-type">${t.type}</span><span class="tx-amount">${t.amount.toFixed(2)}</span><span class="tx-date">${t.date}</span></div>`),...d.deposits.map(d=>`<div class="tx-row"><span class="tx-type">Депозит</span><span class="tx-amount" style="color:${d.status==='paid'?'#0f0':'#ffaa00'}">${d.amount_game.toFixed(2)}</span><span class="tx-date">${d.date}</span></div>`)].join('')||'<div style="color:#444;text-align:center;padding:20px">Нет транзакций</div>'}
-function showSettingsModal(){sm.classList.add('active')}
-async function chLang(v){await fetch('/api/set_lang',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:uid,lang:v})})}
-function tglNotif(){const t=document.getElementById('notifToggle');t.classList.toggle('on');fetch('/api/set_notify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:uid,notify:t.classList.contains('on')?1:0})})}
-[dm,bm,tm,sm].forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('active')}));
-function sp(){if(poll)clearInterval(poll);poll=setInterval(async()=>{try{upd(await(await fetch('/api/game_state')).json())}catch(e){}},500)}
-init();
+async function showTxModal(){tm.classList.add('active');const r=await fetch('/api/transactions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:uid})});const d=await r.json();document.getElementById('txList').innerHTML=[...(d.transactions||[]).map(t=>`<div class="tx-row"><span>${t.type}</span><b>${t.amount.toFixed(2)}</b><small>${t.date}</small></div>`),...(d.deposits||[]).map(d=>`<div class="tx-row"><span>Депозит</span><b>${d.amount_game.toFixed(2)}</b><small>${d.date}</small></div>`)].join('')||'<div class="empty-row">Нет транзакций</div>'}
+function showSettingsModal(){sm.classList.add('active')}async function chLang(v){await fetch('/api/set_lang',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:uid,lang:v})})}function tglNotif(){const t=document.getElementById('notifToggle');t.classList.toggle('on');fetch('/api/set_notify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:uid,notify:t.classList.contains('on')?1:0})})}
+[dm,bm,tm,sm].forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('active')}));function sp(){if(poll)clearInterval(poll);poll=setInterval(async()=>{try{upd(await(await fetch('/api/game_state')).json())}catch(e){}},500)}init();
 </script>
 </body>
 </html>
