@@ -23,6 +23,8 @@ TOKEN = '8731702089:AAHOAcCPSsbQBeYDqdizzxNO4mS8_uHfd4Q'
 WEBAPP_URL = 'https://creator-buys-salem-labs.trycloudflare.com'
 BOT_USERNAME = 'TopGiftCrashBot'
 REF_REWARD_RATE = 0.10
+COINGECKO_TON_URL = 'https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd'
+ton_usd_rate = {'value': 3.0, 'updated_at': 0}
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -46,15 +48,20 @@ def init_db():
     )''')
     c.execute('''CREATE TABLE IF NOT EXISTS deposits (
         id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, amount_game REAL,
-        amount_ton REAL, invoice_id TEXT, pay_url TEXT, status TEXT DEFAULT 'pending', method TEXT DEFAULT 'cryptobot',
+        amount_ton REAL, invoice_id TEXT, pay_url TEXT, status TEXT DEFAULT 'pending', method TEXT DEFAULT 'cryptobot', asset TEXT DEFAULT 'TON',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
     for sql in (
         'ALTER TABLE deposits ADD COLUMN pay_url TEXT',
         "ALTER TABLE deposits ADD COLUMN method TEXT DEFAULT 'cryptobot'",
+        "ALTER TABLE deposits ADD COLUMN asset TEXT DEFAULT 'TON'",
     ):
         try: c.execute(sql)
         except sqlite3.OperationalError: pass
+    c.execute('''CREATE TABLE IF NOT EXISTS withdrawals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, amount REAL, transfer_id TEXT,
+        status TEXT DEFAULT 'pending', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
     c.execute('''CREATE TABLE IF NOT EXISTS transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, type TEXT,
         amount REAL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -67,9 +74,9 @@ def get_player(uid):
     c = conn.cursor()
     c.execute('SELECT * FROM players WHERE user_id=?', (uid,))
     row = c.fetchone()
+    cols = [desc[0] for desc in c.description]
     conn.close()
     if row:
-        cols = [desc[0] for desc in c.description]
         return dict(zip(cols, row))
     return None
 
@@ -130,6 +137,40 @@ def credit_deposit(dep_id, user_id, amount):
             c.execute('INSERT INTO transactions (user_id, type, amount) VALUES (?,?,?)', (row[0], 'referral_bonus', reward))
     conn.commit(); conn.close()
     return bool(changed)
+
+def get_ton_usd_rate():
+    if time.time() - ton_usd_rate.get('updated_at', 0) < 300 and ton_usd_rate.get('value'):
+        return float(ton_usd_rate['value'])
+    try:
+        r = requests.get(COINGECKO_TON_URL, timeout=8)
+        js = r.json()
+        price = float(js['the-open-network']['usd'])
+        if price > 0:
+            ton_usd_rate.update(value=price, updated_at=time.time())
+    except Exception as e:
+        logger.warning(f'CoinGecko TON rate error: {e}')
+    return float(ton_usd_rate.get('value') or 3.0)
+
+def convert_crypto_to_ton(asset, amount):
+    asset = (asset or 'TON').upper()
+    amount = float(amount or 0)
+    if asset == 'USDT':
+        return round(amount / get_ton_usd_rate(), 6)
+    return round(amount, 6)
+
+def notify_user(user_id, text, reply_markup=None):
+    try:
+        payload = {'chat_id': user_id, 'text': text, 'parse_mode': 'HTML'}
+        if reply_markup:
+            payload['reply_markup'] = json.dumps(reply_markup)
+        requests.post(f'https://api.telegram.org/bot{TOKEN}/sendMessage', json=payload, timeout=8)
+    except Exception as e:
+        logger.error(f'Telegram notify error: {e}')
+
+def coingecko_rate_loop():
+    while True:
+        get_ton_usd_rate()
+        time.sleep(300)
 
 def generate_crash_point():
     r = random.random()
@@ -230,7 +271,7 @@ def create_crypto_deposit():
         if r.status_code == 200 and js.get('ok'):
             inv=js['result']; pay_url=inv.get('mini_app_invoice_url') or inv.get('web_app_invoice_url') or inv.get('bot_invoice_url') or inv.get('pay_url')
             conn=sqlite3.connect(DB_PATH); c=conn.cursor()
-            c.execute('INSERT INTO deposits (user_id, amount_game, amount_ton, invoice_id, pay_url, method) VALUES (?,?,?,?,?,?)', (uid, amt, amt, str(inv['invoice_id']), pay_url, 'cryptobot'))
+            c.execute('INSERT INTO deposits (user_id, amount_game, amount_ton, invoice_id, pay_url, method, asset) VALUES (?,?,?,?,?,?,?)', (uid, amt, convert_crypto_to_ton(coin, amt), str(inv['invoice_id']), pay_url, 'cryptobot', coin))
             dep_id=c.lastrowid; conn.commit(); conn.close()
             return jsonify({'status':'ok','deposit_id':dep_id,'pay_url':pay_url,'invoice_id':inv['invoice_id']})
     except Exception as e:
@@ -241,10 +282,10 @@ def create_crypto_deposit():
 def deposit_status():
     req = request.json; dep_id = req.get('deposit_id')
     conn = sqlite3.connect(DB_PATH); c = conn.cursor()
-    c.execute('SELECT user_id, amount_game, amount_ton, invoice_id, status, method FROM deposits WHERE id=?', (dep_id,))
+    c.execute("SELECT user_id, amount_game, amount_ton, invoice_id, status, method, COALESCE(asset,'TON') FROM deposits WHERE id=?", (dep_id,))
     row = c.fetchone(); conn.close()
     if not row: return jsonify({'status':'not_found'})
-    user_id, amount_game, amount_ton, invoice_id, status, method = row
+    user_id, amount_game, amount_ton, invoice_id, status, method, asset = row
     if status == 'paid': return jsonify({'status':'paid'})
     if method == 'cryptobot':
         headers = {'Crypto-Pay-API-Token': CRYPTOBOT_TOKEN}
@@ -253,7 +294,7 @@ def deposit_status():
             js = r.json()
             items = js.get('result', {}).get('items', []) if js.get('ok') else []
             if items and items[0].get('status') == 'paid':
-                credit_deposit(dep_id, user_id, amount_game)
+                credit_deposit(dep_id, user_id, convert_crypto_to_ton(items[0].get('asset') or asset, items[0].get('amount') or amount_game))
                 return jsonify({'status':'paid'})
         except Exception as e: logger.error(f'Status check error: {e}')
     else:
@@ -271,6 +312,33 @@ def referral():
     p=get_player(uid); ensure_referral(uid); p=get_player(uid)
     conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('SELECT COUNT(*) FROM referrals WHERE referrer_id=?',(uid,)); count=c.fetchone()[0]; conn.close()
     return jsonify({'status':'ok','ref_code':p['ref_code'],'ref_count':count,'ref_balance':p.get('ref_balance') or 0,'link':f'https://t.me/{BOT_USERNAME}?start={p["ref_code"]}'})
+
+
+@app.route('/api/create_withdrawal', methods=['POST'])
+def create_withdrawal():
+    data = request.json or {}; uid = data.get('user_id'); amt = float(data.get('amount', 0))
+    if amt <= 0: return jsonify({'status':'error','message':'Invalid amount'})
+    p = get_player(uid)
+    if not p or amt > float(p.get('balance') or 0): return jsonify({'status':'error','message':'Недостаточно средств'})
+    update_player(uid, balance=float(p['balance']) - amt)
+    spend_id = f'wd_{uid}_{secrets.token_hex(8)}'
+    conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('INSERT INTO withdrawals (user_id, amount, transfer_id, status) VALUES (?,?,?,?)', (uid, amt, spend_id, 'pending')); wid=c.lastrowid; conn.commit(); conn.close()
+    headers = {'Crypto-Pay-API-Token': CRYPTOBOT_TOKEN}
+    payload = {'user_id': uid, 'asset': 'TON', 'amount': str(round(amt, 6)), 'spend_id': spend_id, 'comment': 'TopGift withdrawal'}
+    try:
+        r = requests.post(f'{CRYPTOBOT_API}/transfer', headers=headers, json=payload, timeout=12)
+        js = r.json()
+        if r.status_code == 200 and js.get('ok'):
+            conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('UPDATE withdrawals SET status=? WHERE id=?', ('paid', wid)); c.execute('INSERT INTO transactions (user_id, type, amount) VALUES (?,?,?)', (uid, 'withdrawal', -amt)); conn.commit(); conn.close()
+            return jsonify({'status':'ok','balance':float(p['balance'])-amt})
+        raise RuntimeError(js.get('error') or js)
+    except Exception as e:
+        logger.error(f'CryptoBot transfer error: {e}')
+        fresh = get_player(uid) or {'balance': 0}
+        update_player(uid, balance=float(fresh.get('balance') or 0) + amt)
+        conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('UPDATE withdrawals SET status=? WHERE id=?', ('failed', wid)); conn.commit(); conn.close()
+        notify_user(uid, '⚡️ <b>Ошибка вывода</b>\nСредства возвращены на ваш баланс', {'inline_keyboard': [[{'text':'Поддержка','url':'https://t.me/killowcode'}]]})
+        return jsonify({'status':'error','message':'Ошибка вывода','balance':float(fresh.get('balance') or 0)+amt})
 
 @app.route('/api/transactions', methods=['POST'])
 def transactions():
@@ -296,12 +364,6 @@ def get_game_state():
     for uid,bet in game_state.bets.items():
         p=get_player(uid) or {}
         players_list.append({'name':public_player(p),'avatar':p.get('avatar_url') or '','bet':bet['amount'],'cashed_out':bet['cashed_out'],'multiplier':bet['multiplier'] or game_state.current_multiplier})
-    if not players_list:
-        conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('SELECT user_id,username,first_name,last_name,avatar_url FROM players ORDER BY created_at DESC LIMIT 8')
-        for r in c.fetchall():
-            p={'user_id':r[0],'username':r[1],'first_name':r[2],'last_name':r[3],'avatar_url':r[4]}
-            players_list.append({'name':public_player(p),'avatar':p.get('avatar_url') or '','bet':0,'cashed_out':False,'multiplier':1})
-        conn.close()
     return jsonify({'status':game_state.status,'multiplier':game_state.current_multiplier,'countdown':game_state.countdown,'last_results':game_state.last_results,'crash_point':game_state.crash_point if game_state.status=='crashed' else None,'players':players_list})
 
 def run_game_loop():
@@ -324,10 +386,12 @@ def run_game_loop():
             if game_state.current_multiplier>=game_state.crash_point:
                 game_state.current_multiplier=game_state.crash_point; break
             time.sleep(max(0.02,0.06-game_state.current_multiplier*0.002))
-        game_state.status='crashed'
+        game_state.status='exploding'
         game_state.last_results.insert(0,round(game_state.crash_point,2))
         if len(game_state.last_results)>8: game_state.last_results=game_state.last_results[:8]
-        time.sleep(3)
+        time.sleep(1.8)
+        game_state.status='crashed'
+        time.sleep(1.6)
 
 def deposit_checker():
     while True:
@@ -352,4 +416,5 @@ if __name__=='__main__':
     threading.Thread(target=run_game_loop, daemon=True).start()
     threading.Thread(target=run_flask, daemon=True).start()
     threading.Thread(target=deposit_checker, daemon=True).start()
+    threading.Thread(target=coingecko_rate_loop, daemon=True).start()
     asyncio.run(run_bot())
