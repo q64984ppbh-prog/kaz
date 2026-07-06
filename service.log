@@ -1,0 +1,242 @@
+ * Serving Flask app 'bot'
+ * Debug mode: off
+2026-07-06 11:58:40,494 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8000
+ * Running on http://95.85.253.174:8000
+2026-07-06 11:58:40,494 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-07-06 11:58:40,590 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8731702089:AAHOAcCPSsbQBeYDqdizzxNO4mS8_uHfd4Q/getMe "HTTP/1.1 200 OK"
+2026-07-06 11:58:40,591 - telegram.ext.Application - INFO - Application started
+2026-07-06 11:58:40,591 - telegram.ext.Application - WARNING - Fetching updates got a asyncio.CancelledError. Ignoring as this task may onlybe closed via `Application.stop`.
+Exception ignored in: <coroutine object Application._update_fetcher at 0x7fe69fe39cb0>
+Traceback (most recent call last):
+  File "/root/kaz/venv/lib/python3.10/site-packages/telegram/ext/_application.py", line 1149, in _update_fetcher
+    update = await self.update_queue.get()
+  File "/usr/lib/python3.10/asyncio/queues.py", line 161, in get
+    getter.cancel()  # Just in case getter is not done yet.
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 753, in call_soon
+    self._check_closed()
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 515, in _check_closed
+    raise RuntimeError('Event loop is closed')
+RuntimeError: Event loop is closed
+2026-07-06 11:59:13,978 - asyncio - ERROR - Task was destroyed but it is pending!
+task: <Task pending name='Application:8731702089:update_fetcher' coro=<Application._update_fetcher() done, defined at /root/kaz/venv/lib/python3.10/site-packages/telegram/ext/_application.py:1145> wait_for=<Future cancelled> cb=[gather.<locals>._done_callback() at /usr/lib/python3.10/asyncio/tasks.py:720]>
+sys:1: RuntimeWarning: coroutine 'Application.initialize' was never awaited
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+sys:1: RuntimeWarning: coroutine 'Application.stop' was never awaited
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+ * Serving Flask app 'bot'
+ * Debug mode: off
+2026-07-06 11:59:14,278 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8000
+ * Running on http://95.85.253.174:8000
+2026-07-06 11:59:14,278 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-07-06 11:59:14,380 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8731702089:AAHOAcCPSsbQBeYDqdizzxNO4mS8_uHfd4Q/getMe "HTTP/1.1 200 OK"
+2026-07-06 11:59:14,381 - telegram.ext.Application - INFO - Application started
+2026-07-06 11:59:14,381 - telegram.ext.Application - WARNING - Fetching updates got a asyncio.CancelledError. Ignoring as this task may onlybe closed via `Application.stop`.
+Exception ignored in: <coroutine object Application._update_fetcher at 0x7f44dc51dcb0>
+Traceback (most recent call last):
+  File "/root/kaz/venv/lib/python3.10/site-packages/telegram/ext/_application.py", line 1149, in _update_fetcher
+    update = await self.update_queue.get()
+  File "/usr/lib/python3.10/asyncio/queues.py", line 161, in get
+    getter.cancel()  # Just in case getter is not done yet.
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 753, in call_soon
+    self._check_closed()
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 515, in _check_closed
+    raise RuntimeError('Event loop is closed')
+RuntimeError: Event loop is closed
+2026-07-06 12:00:04,058 - asyncio - ERROR - Task was destroyed but it is pending!
+task: <Task pending name='Application:8731702089:update_fetcher' coro=<Application._update_fetcher() done, defined at /root/kaz/venv/lib/python3.10/site-packages/telegram/ext/_application.py:1145> wait_for=<Future cancelled> cb=[gather.<locals>._done_callback() at /usr/lib/python3.10/asyncio/tasks.py:720]>
+sys:1: RuntimeWarning: coroutine 'Application.initialize' was never awaited
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+sys:1: RuntimeWarning: coroutine 'Application.stop' was never awaited
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+ * Serving Flask app 'bot'
+ * Debug mode: off
+2026-07-06 12:00:04,314 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8000
+ * Running on http://95.85.253.174:8000
+2026-07-06 12:00:04,314 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-07-06 12:00:04,416 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8731702089:AAHOAcCPSsbQBeYDqdizzxNO4mS8_uHfd4Q/getMe "HTTP/1.1 200 OK"
+2026-07-06 12:00:04,417 - telegram.ext.Application - INFO - Application started
+2026-07-06 12:00:04,417 - telegram.ext.Application - WARNING - Fetching updates got a asyncio.CancelledError. Ignoring as this task may onlybe closed via `Application.stop`.
+Exception ignored in: <coroutine object Application._update_fetcher at 0x7f00d2ee9cb0>
+Traceback (most recent call last):
+  File "/root/kaz/venv/lib/python3.10/site-packages/telegram/ext/_application.py", line 1149, in _update_fetcher
+    update = await self.update_queue.get()
+  File "/usr/lib/python3.10/asyncio/queues.py", line 161, in get
+    getter.cancel()  # Just in case getter is not done yet.
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 753, in call_soon
+    self._check_closed()
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 515, in _check_closed
+    raise RuntimeError('Event loop is closed')
+RuntimeError: Event loop is closed
+2026-07-06 12:09:58,405 - asyncio - ERROR - Task was destroyed but it is pending!
+task: <Task pending name='Application:8731702089:update_fetcher' coro=<Application._update_fetcher() done, defined at /root/kaz/venv/lib/python3.10/site-packages/telegram/ext/_application.py:1145> wait_for=<Future cancelled> cb=[gather.<locals>._done_callback() at /usr/lib/python3.10/asyncio/tasks.py:720]>
+sys:1: RuntimeWarning: coroutine 'Application.initialize' was never awaited
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+sys:1: RuntimeWarning: coroutine 'Application.stop' was never awaited
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+ * Serving Flask app 'bot'
+ * Debug mode: off
+2026-07-06 12:09:58,638 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8000
+ * Running on http://95.85.253.174:8000
+2026-07-06 12:09:58,639 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-07-06 12:09:58,736 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8731702089:AAHOAcCPSsbQBeYDqdizzxNO4mS8_uHfd4Q/getMe "HTTP/1.1 200 OK"
+2026-07-06 12:09:58,737 - telegram.ext.Application - INFO - Application started
+2026-07-06 12:09:58,737 - telegram.ext.Application - WARNING - Fetching updates got a asyncio.CancelledError. Ignoring as this task may onlybe closed via `Application.stop`.
+2026-07-06 12:10:22,723 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:22] "GET / HTTP/1.1" 200 -
+2026-07-06 12:10:24,262 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:24] "GET / HTTP/1.1" 200 -
+2026-07-06 12:10:24,710 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:24] "[33mGET /static/gifs/fly.gif HTTP/1.1[0m" 404 -
+2026-07-06 12:10:24,712 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:24] "[33mGET /static/gifs/crush.gif HTTP/1.1[0m" 404 -
+2026-07-06 12:10:25,400 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:25] "[33mGET /static/gifs/crush.gif HTTP/1.1[0m" 404 -
+2026-07-06 12:10:25,401 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:25] "[33mGET /static/gifs/fly.gif HTTP/1.1[0m" 404 -
+2026-07-06 12:10:25,407 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:25] "POST /api/init HTTP/1.1" 200 -
+2026-07-06 12:10:25,761 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:25] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:25,890 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:25] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-07-06 12:10:25,947 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:25] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:26,146 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:26] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:26,369 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:26] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:26,552 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:26] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:26,772 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:26] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:26,955 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:26] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:27,188 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:27] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:27,406 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:27] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:27,603 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:27] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:27,775 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:27] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:27,995 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:27] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:28,192 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:28] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:28,404 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:28] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:28,604 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:28] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:28,818 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:28] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:28,996 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:28] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:29,248 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:29] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:29,406 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:29] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:29,631 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:29] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:29,830 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:29] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:30,049 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:30] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:30,215 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:30] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:30,376 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:30] "POST /api/place_bet HTTP/1.1" 200 -
+2026-07-06 12:10:30,425 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:30] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:30,656 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:30] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:30,826 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:30] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:31,108 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:31] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:31,239 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:31] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:31,470 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:31] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:31,670 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:31] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:31,853 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:31] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:32,073 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:32] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:32,276 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:32] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:32,474 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:32] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:10:32,682 - werkzeug - INFO - 127.0.0.1 - - [06/Jul/2026 12:10:32] "GET /api/game_state HTTP/1.1" 200 -
+2026-07-06 12:11:29,172 - asyncio - ERROR - Task was destroyed but it is pending!
+task: <Task pending name='Application:8731702089:update_fetcher' coro=<Application._update_fetcher() running at /root/kaz/venv/lib/python3.10/site-packages/telegram/ext/_application.py:1149> wait_for=<Future pending cb=[Task.task_wakeup()]> cb=[gather.<locals>._done_callback() at /usr/lib/python3.10/asyncio/tasks.py:720]>
+Exception ignored in: <coroutine object Application._update_fetcher at 0x7f8d86d69cb0>
+Traceback (most recent call last):
+  File "/root/kaz/venv/lib/python3.10/site-packages/telegram/ext/_application.py", line 1149, in _update_fetcher
+    update = await self.update_queue.get()
+  File "/usr/lib/python3.10/asyncio/queues.py", line 161, in get
+    getter.cancel()  # Just in case getter is not done yet.
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 753, in call_soon
+    self._check_closed()
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 515, in _check_closed
+    raise RuntimeError('Event loop is closed')
+RuntimeError: Event loop is closed
+sys:1: RuntimeWarning: coroutine 'Application.stop' was never awaited
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+sys:1: RuntimeWarning: coroutine 'Application.initialize' was never awaited
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+2026-07-06 12:11:29,410 - __main__ - INFO - Game loop started
+2026-07-06 12:11:29,411 - __main__ - INFO - Flask started
+ * Serving Flask app 'bot'
+ * Debug mode: off
+2026-07-06 12:11:29,418 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8000
+ * Running on http://95.85.253.174:8000
+2026-07-06 12:11:29,418 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-07-06 12:11:29,519 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8731702089:AAHOAcCPSsbQBeYDqdizzxNO4mS8_uHfd4Q/getMe "HTTP/1.1 200 OK"
+2026-07-06 12:11:29,520 - telegram.ext.Application - INFO - Application started
+2026-07-06 12:11:29,520 - __main__ - INFO - Bot started successfully!
+2026-07-06 12:11:29,520 - telegram.ext.Application - WARNING - Fetching updates got a asyncio.CancelledError. Ignoring as this task may onlybe closed via `Application.stop`.
+Exception ignored in: <coroutine object Application._update_fetcher at 0x7fcb4a065e70>
+Traceback (most recent call last):
+  File "/root/kaz/venv/lib/python3.10/site-packages/telegram/ext/_application.py", line 1149, in _update_fetcher
+    update = await self.update_queue.get()
+  File "/usr/lib/python3.10/asyncio/queues.py", line 161, in get
+    getter.cancel()  # Just in case getter is not done yet.
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 753, in call_soon
+    self._check_closed()
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 515, in _check_closed
+    raise RuntimeError('Event loop is closed')
+RuntimeError: Event loop is closed
+2026-07-06 12:12:21,691 - asyncio - ERROR - Task was destroyed but it is pending!
+task: <Task pending name='Application:8731702089:update_fetcher' coro=<Application._update_fetcher() done, defined at /root/kaz/venv/lib/python3.10/site-packages/telegram/ext/_application.py:1145> wait_for=<Future cancelled> cb=[gather.<locals>._done_callback() at /usr/lib/python3.10/asyncio/tasks.py:720]>
+sys:1: RuntimeWarning: coroutine 'Application.initialize' was never awaited
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+sys:1: RuntimeWarning: coroutine 'Application.stop' was never awaited
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+2026-07-06 12:12:21,922 - __main__ - INFO - Game loop started in separate thread
+2026-07-06 12:12:21,922 - __main__ - INFO - Flask started on port 8000
+ * Serving Flask app 'main'
+ * Debug mode: off
+2026-07-06 12:12:21,931 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8000
+ * Running on http://95.85.253.174:8000
+2026-07-06 12:12:21,931 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-07-06 12:12:22,042 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8731702089:AAHOAcCPSsbQBeYDqdizzxNO4mS8_uHfd4Q/getMe "HTTP/1.1 200 OK"
+2026-07-06 12:12:22,042 - telegram.ext.Application - INFO - Application started
+2026-07-06 12:12:22,042 - __main__ - INFO - Bot polling started!
+2026-07-06 12:12:22,043 - telegram.ext.Application - WARNING - Fetching updates got a asyncio.CancelledError. Ignoring as this task may onlybe closed via `Application.stop`.
+Exception ignored in: <coroutine object Application._update_fetcher at 0x7faace136260>
+Traceback (most recent call last):
+  File "/root/kaz/venv/lib/python3.10/site-packages/telegram/ext/_application.py", line 1149, in _update_fetcher
+    update = await self.update_queue.get()
+  File "/usr/lib/python3.10/asyncio/queues.py", line 161, in get
+    getter.cancel()  # Just in case getter is not done yet.
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 753, in call_soon
+    self._check_closed()
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 515, in _check_closed
+    raise RuntimeError('Event loop is closed')
+RuntimeError: Event loop is closed
+2026-07-06 12:12:57,532 - asyncio - ERROR - Task was destroyed but it is pending!
+task: <Task pending name='Application:8731702089:update_fetcher' coro=<Application._update_fetcher() done, defined at /root/kaz/venv/lib/python3.10/site-packages/telegram/ext/_application.py:1145> wait_for=<Future cancelled> cb=[gather.<locals>._done_callback() at /usr/lib/python3.10/asyncio/tasks.py:720]>
+sys:1: RuntimeWarning: coroutine 'Application.initialize' was never awaited
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+sys:1: RuntimeWarning: coroutine 'Application.stop' was never awaited
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+2026-07-06 12:12:57,812 - __main__ - INFO - Game loop started
+2026-07-06 12:12:57,812 - __main__ - INFO - Flask started on port 8000
+ * Serving Flask app 'main'
+ * Debug mode: off
+2026-07-06 12:12:57,818 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8000
+ * Running on http://95.85.253.174:8000
+2026-07-06 12:12:57,818 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-07-06 12:12:58,194 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8731702089:AAHOAcCPSsbQBeYDqdizzxNO4mS8_uHfd4Q/getMe "HTTP/1.1 200 OK"
+2026-07-06 12:12:58,194 - telegram.ext.Application - INFO - Application started
+2026-07-06 12:12:58,194 - __main__ - INFO - Bot polling started! Waiting for /start commands...
+2026-07-06 12:12:58,195 - telegram.ext.Application - WARNING - Fetching updates got a asyncio.CancelledError. Ignoring as this task may onlybe closed via `Application.stop`.
+Exception ignored in: <coroutine object Application._update_fetcher at 0x7fbdb1979e00>
+Traceback (most recent call last):
+  File "/root/kaz/venv/lib/python3.10/site-packages/telegram/ext/_application.py", line 1149, in _update_fetcher
+    update = await self.update_queue.get()
+  File "/usr/lib/python3.10/asyncio/queues.py", line 161, in get
+    getter.cancel()  # Just in case getter is not done yet.
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 753, in call_soon
+    self._check_closed()
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 515, in _check_closed
+    raise RuntimeError('Event loop is closed')
+RuntimeError: Event loop is closed
+2026-07-06 12:13:33,380 - asyncio - ERROR - Task was destroyed but it is pending!
+task: <Task pending name='Application:8731702089:update_fetcher' coro=<Application._update_fetcher() done, defined at /root/kaz/venv/lib/python3.10/site-packages/telegram/ext/_application.py:1145> wait_for=<Future cancelled> cb=[gather.<locals>._done_callback() at /usr/lib/python3.10/asyncio/tasks.py:720]>
+sys:1: RuntimeWarning: coroutine 'Application.initialize' was never awaited
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+sys:1: RuntimeWarning: coroutine 'Application.stop' was never awaited
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
