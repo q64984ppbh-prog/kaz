@@ -1,4 +1,4 @@
-import json, random, time, logging, threading, asyncio, secrets, sqlite3, requests
+import json, random, time, logging, threading, asyncio, secrets, sqlite3, requests, base64
 from pathlib import Path
 from typing import Dict
 from dataclasses import dataclass, field
@@ -155,13 +155,13 @@ def save_wallet():
 
 @app.route('/api/place_bet', methods=['POST'])
 def place_bet():
-    data = request.json; uid = data.get('user_id'); amt = float(data.get('amount',0))
+    data = request.json; uid = data.get('user_id'); amt = float(data.get('amount',0)); auto_cashout = float(data.get('auto_cashout') or 0)
     p = get_player(uid)
     if game_state.status!='countdown': return jsonify({'status':'error'})
     if amt<=0 or amt>p['balance']: return jsonify({'status':'error'})
     if uid in game_state.bets: return jsonify({'status':'error'})
     update_player(uid, balance=p['balance']-amt)
-    game_state.bets[uid]={'amount':amt,'cashed_out':False,'multiplier':0}
+    game_state.bets[uid]={'amount':amt,'cashed_out':False,'multiplier':0,'auto_cashout':auto_cashout if auto_cashout >= 1.1 else 0}
     return jsonify({'status':'ok','balance':p['balance']-amt})
 
 @app.route('/api/cashout', methods=['POST'])
@@ -181,7 +181,7 @@ def create_deposit():
     p = get_player(uid)
     if not p['wallet_address']: return jsonify({'status':'error','message':'Connect wallet'})
     if amt<=0: return jsonify({'status':'error'})
-    ton_amt = round(amt*0.1, 4)
+    ton_amt = round(amt, 4)
     comment = f'dep_{int(time.time())}_{uid}'
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -189,7 +189,8 @@ def create_deposit():
     dep_id = c.lastrowid
     conn.commit()
     conn.close()
-    return jsonify({'status':'ok','deposit_id':dep_id,'amount_ton':ton_amt,'admin_wallet':ADMIN_WALLET,'comment':comment})
+    payload = base64.b64encode(comment.encode()).decode()
+    return jsonify({'status':'ok','deposit_id':dep_id,'amount_ton':ton_amt,'admin_wallet':ADMIN_WALLET,'comment':comment,'payload':payload})
 
 @app.route('/api/deposit_status', methods=['POST'])
 def deposit_status():
@@ -200,6 +201,16 @@ def deposit_status():
     row = c.fetchone()
     conn.close()
     return jsonify({'status': row[0] if row else 'not_found'})
+
+
+@app.route('/api/create_crypto_deposit', methods=['POST'])
+def create_crypto_deposit():
+    data = request.json
+    coin = (data.get('coin') or 'TON').upper()
+    amt = float(data.get('amount', 0))
+    if coin not in ('TON', 'USDT') or amt <= 0:
+        return jsonify({'status': 'error', 'message': 'Invalid amount or coin'})
+    return jsonify({'status': 'ok', 'message': f'Счёт Crypto Bot на {amt:g} {coin} создан'})
 
 @app.route('/api/transactions', methods=['POST'])
 def transactions():
@@ -237,6 +248,14 @@ def run_game_loop():
             elapsed=time.time()-st
             acceleration=1+game_state.current_multiplier*0.3
             game_state.current_multiplier=round(1.0+elapsed*0.12*acceleration,2)
+            for uid, bet in list(game_state.bets.items()):
+                target = float(bet.get('auto_cashout') or 0)
+                if target and not bet['cashed_out'] and game_state.current_multiplier >= target:
+                    winnings = bet['amount'] * target
+                    p = get_player(uid)
+                    update_player(uid, balance=p['balance'] + winnings)
+                    bet['cashed_out'] = True
+                    bet['multiplier'] = target
             if game_state.current_multiplier>=game_state.crash_point:
                 game_state.current_multiplier=game_state.crash_point; break
             time.sleep(max(0.03,0.08-game_state.current_multiplier*0.003))
