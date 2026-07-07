@@ -52,12 +52,13 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS deposits (
         id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, amount_game REAL,
         amount_ton REAL, invoice_id TEXT, pay_url TEXT, status TEXT DEFAULT 'pending', method TEXT DEFAULT 'cryptobot', asset TEXT DEFAULT 'TON',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        telegram_payment_charge_id TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
     for sql in (
         'ALTER TABLE deposits ADD COLUMN pay_url TEXT',
         "ALTER TABLE deposits ADD COLUMN method TEXT DEFAULT 'cryptobot'",
         "ALTER TABLE deposits ADD COLUMN asset TEXT DEFAULT 'TON'",
+        'ALTER TABLE deposits ADD COLUMN telegram_payment_charge_id TEXT',
     ):
         try: c.execute(sql)
         except sqlite3.OperationalError: pass
@@ -184,13 +185,29 @@ def coingecko_rate_loop():
         get_ton_usd_rate()
         time.sleep(300)
 
-def generate_crash_point():
-    r = random.random()
-    if r < 0.42: return round(random.uniform(1.0, 1.45), 2)
-    elif r < 0.74: return round(random.uniform(1.45, 2.4), 2)
-    elif r < 0.94: return round(random.uniform(2.4, 5.0), 2)
-    elif r < 0.992: return round(random.uniform(5.0, 12.0), 2)
-    return round(random.uniform(12.0, 25.0), 2)
+MAX_CRASH_MULTIPLIER = 1488.0
+
+def make_round_seeds():
+    server_seed = secrets.token_hex(32)
+    client_seed = secrets.token_hex(32)
+    salt = secrets.token_hex(16)
+    server_seed_hash = hashlib.sha256(server_seed.encode()).hexdigest()
+    return server_seed, client_seed, salt, server_seed_hash
+
+def generate_crash_point(server_seed=None, client_seed=None, salt=None, bonus_round=False):
+    server_seed = server_seed or secrets.token_hex(32)
+    client_seed = client_seed or secrets.token_hex(32)
+    salt = salt or secrets.token_hex(16)
+    digest = hmac.new(server_seed.encode(), f'{client_seed}:{salt}'.encode(), hashlib.sha256).hexdigest()
+    roll = int(digest[:13], 16) / float(0xFFFFFFFFFFFFF)
+    if bonus_round:
+        if roll > 0.992:
+            return round(600 + (MAX_CRASH_MULTIPLIER - 600) * ((roll - 0.992) / 0.008), 2)
+        return round(100 + 300 * roll, 2)
+    if roll < 0.01:
+        return 1.0
+    crash = 0.99 / (1.0 - roll)
+    return round(min(MAX_CRASH_MULTIPLIER, max(1.0, crash)), 2)
 
 @dataclass
 class GameState:
@@ -201,6 +218,13 @@ class GameState:
     last_results: list = field(default_factory=list)
     bets: dict = field(default_factory=dict)
     pending_bets: dict = field(default_factory=dict)
+    server_seed: str = ''
+    server_seed_hash: str = ''
+    client_seed: str = ''
+    salt: str = ''
+    revealed_server_seed: str = ''
+    revealed_salt: str = ''
+    force_crash: bool = False
 
 game_state = GameState()
 
@@ -264,6 +288,37 @@ def cashout():
     bet['cashed_out']=True; bet['multiplier']=game_state.current_multiplier
     fresh=get_player(uid); return jsonify({'status':'ok','balance':fresh.get('balance') or 0,'stars_balance':fresh.get('stars_balance') or 0,'multiplier':game_state.current_multiplier,'winnings':winnings,'currency':bet.get('currency','TON')})
 
+@app.route('/api/create_stars_invoice', methods=['POST'])
+def create_stars_invoice():
+    data = request.json or {}; uid = int(data.get('user_id') or 0); amount = int(data.get('amount') or 0)
+    if amount < 1: return jsonify({'status':'error','message':'Минимум 1 звезда'})
+    p = get_player(uid)
+    if not p or p.get('is_banned'): return jsonify({'status':'error','message':'Пользователь заблокирован'}), 403
+    payload = json.dumps({'user_id': uid, 'amount': amount, 'nonce': secrets.token_hex(8)})
+    conn = sqlite3.connect(DB_PATH); c = conn.cursor()
+    c.execute('INSERT INTO deposits (user_id, amount_game, amount_ton, invoice_id, method, asset) VALUES (?,?,?,?,?,?)', (uid, amount, amount, payload, 'telegram_stars', 'STARS'))
+    dep_id = c.lastrowid; conn.commit(); conn.close()
+    body = {
+        'title': 'Пополнение TopGift',
+        'description': f'Пополнение баланса на {amount} Telegram Stars',
+        'payload': payload,
+        'provider_token': '',
+        'currency': 'XTR',
+        'prices': [{'label': 'Telegram Stars', 'amount': amount}]
+    }
+    try:
+        r = requests.post(f'https://api.telegram.org/bot{TOKEN}/createInvoiceLink', json=body, timeout=10)
+        js = r.json()
+        if r.status_code == 200 and js.get('ok'):
+            c = sqlite3.connect(DB_PATH).cursor()
+            conn = c.connection
+            c.execute('UPDATE deposits SET pay_url=? WHERE id=?', (js['result'], dep_id)); conn.commit(); conn.close()
+            return jsonify({'status':'ok','invoiceLink':js['result'],'deposit_id':dep_id})
+        logger.error(f'Stars invoice error: {js}')
+    except Exception as e:
+        logger.error(f'Stars invoice exception: {e}')
+    return jsonify({'status':'error','message':'Не удалось создать счёт Stars'})
+
 @app.route('/api/create_deposit', methods=['POST'])
 def create_deposit():
     data = request.json; uid = data.get('user_id'); amt = float(data.get('amount',0))
@@ -305,6 +360,8 @@ def check_deposit_status():
     if not row: return jsonify({'status':'not_found'})
     user_id, amount_game, amount_ton, invoice_id, status, method, asset = row
     if status == 'paid': return jsonify({'status':'paid'})
+    if method == 'telegram_stars':
+        return jsonify({'status':'pending'})
     if method == 'cryptobot':
         headers = {'Crypto-Pay-API-Token': CRYPTOBOT_TOKEN}
         try:
@@ -407,6 +464,15 @@ def admin_transactions():
     conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('SELECT type,amount,created_at,COALESCE(currency,"TON") FROM transactions WHERE user_id=? ORDER BY created_at DESC LIMIT 80',(target,)); txs=[{'type':r[0],'amount':r[1],'date':r[2],'currency':r[3]} for r in c.fetchall()]; conn.close()
     return jsonify({'status':'ok','transactions':txs})
 
+@app.route('/api/admin/crash', methods=['POST'])
+def admin_crash():
+    data=request.json or {}; admin_id=data.get('admin_id')
+    if not admin_required(admin_id): return jsonify({'status':'error','message':'Forbidden'}), 403
+    if game_state.status != 'flying': return jsonify({'status':'error','message':'Раунд сейчас не летит'})
+    game_state.force_crash = True
+    game_state.crash_point = min(game_state.crash_point or game_state.current_multiplier, max(1.0, game_state.current_multiplier))
+    return jsonify({'status':'ok','multiplier':game_state.current_multiplier})
+
 @app.route('/api/set_lang', methods=['POST'])
 def set_lang(): return jsonify({'status': 'ok'})
 
@@ -419,17 +485,20 @@ def get_game_state():
     for uid,bet in game_state.bets.items():
         p=get_player(uid) or {}
         players_list.append({'name':public_player(p),'avatar':p.get('avatar_url') or '','bet':bet['amount'],'currency':bet.get('currency','TON'),'cashed_out':bet['cashed_out'],'multiplier':bet['multiplier'] or (game_state.crash_point if game_state.status in ('exploding','crashed') and not bet['cashed_out'] else game_state.current_multiplier),'payout':(bet['amount']*(bet['multiplier'] or 0)) if bet['cashed_out'] else 0})
-    return jsonify({'status':game_state.status,'multiplier':game_state.current_multiplier,'countdown':game_state.countdown,'last_results':game_state.last_results,'crash_point':game_state.crash_point if game_state.status=='crashed' else None,'players':players_list})
+    return jsonify({'status':game_state.status,'multiplier':game_state.current_multiplier,'countdown':game_state.countdown,'last_results':game_state.last_results,'crash_point':game_state.crash_point if game_state.status=='crashed' else None,'fair':{'server_seed_hash':game_state.server_seed_hash,'client_seed':game_state.client_seed,'salt':game_state.revealed_salt if game_state.status=='crashed' else None,'server_seed':game_state.revealed_server_seed if game_state.status=='crashed' else None},'players':players_list})
 
 def run_game_loop():
     while True:
-        game_state.status='countdown'; game_state.bets = game_state.pending_bets; game_state.pending_bets = {}
+        game_state.status='countdown'; game_state.bets = game_state.pending_bets; game_state.pending_bets = {}; game_state.force_crash = False
+        game_state.server_seed, game_state.client_seed, game_state.salt, game_state.server_seed_hash = make_round_seeds()
+        game_state.revealed_server_seed = ''; game_state.revealed_salt = ''
         for i in range(10,0,-1): game_state.countdown=i; game_state.status='countdown'; time.sleep(1)
-        game_state.crash_point=generate_crash_point(); game_state.current_multiplier=1.0; game_state.status='flying'
+        bonus_round = not game_state.bets
+        game_state.crash_point=generate_crash_point(game_state.server_seed, game_state.client_seed, game_state.salt, bonus_round); game_state.current_multiplier=1.0; game_state.status='flying'
         st=time.time()
         while game_state.current_multiplier<game_state.crash_point:
             elapsed=time.time()-st
-            game_state.current_multiplier=round(1.0 + 0.10 * (pow(1.55, elapsed) - 1.0), 2)
+            game_state.current_multiplier=round(1.0 + 0.18 * (pow(1.42, elapsed) - 1.0), 2)
             for uid, bet in list(game_state.bets.items()):
                 target = float(bet.get('auto_cashout') or 0)
                 if target and not bet['cashed_out'] and game_state.current_multiplier >= target:
@@ -439,9 +508,14 @@ def run_game_loop():
                     update_player(uid, **{balance_key: float(p.get(balance_key) or 0) + winnings})
                     bet['cashed_out'] = True
                     bet['multiplier'] = target
-            if game_state.current_multiplier>=game_state.crash_point:
+            active_bets = [b for b in game_state.bets.values() if not b.get('cashed_out')]
+            if not active_bets and game_state.crash_point < 100:
+                game_state.crash_point = generate_crash_point(game_state.server_seed, game_state.client_seed, game_state.salt, True)
+            if game_state.force_crash or game_state.current_multiplier>=game_state.crash_point:
                 game_state.current_multiplier=game_state.crash_point; break
             time.sleep(max(0.02,0.06-game_state.current_multiplier*0.002))
+        game_state.revealed_server_seed = game_state.server_seed
+        game_state.revealed_salt = game_state.salt
         game_state.status='exploding'
         game_state.last_results.insert(0,round(game_state.crash_point,2))
         if len(game_state.last_results)>8: game_state.last_results=game_state.last_results[:8]
@@ -464,8 +538,41 @@ async def run_bot():
         ref=(message.text.split(maxsplit=1)[1].strip() if message.text and len(message.text.split(maxsplit=1))>1 else '')
         update_player(message.from_user.id, username=message.from_user.username or '', first_name=message.from_user.first_name or '', last_name=message.from_user.last_name or '')
         ensure_referral(message.from_user.id, ref)
+        p = get_player(message.from_user.id) or {}
+        if p.get('is_banned'):
+            await message.answer('❌\n<b>Вы заблокированы в боте</b>\nдля выяснения обстоятельств обратитесь в поддержку')
+            return
         kb=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Play TopGift (RU)", web_app=WebAppInfo(url=WEBAPP_URL))]])
         await message.answer("Welcome to TopGift! Start winning real Telegram Gifts right now!", reply_markup=kb)
+
+    @dp.pre_checkout_query()
+    async def pre_checkout(query: types.PreCheckoutQuery):
+        await bot.answer_pre_checkout_query(query.id, ok=True)
+
+    @dp.message(lambda message: bool(message.successful_payment))
+    async def successful_payment(message: types.Message):
+        payment = message.successful_payment
+        if payment.currency != 'XTR':
+            return
+        try:
+            payload = json.loads(payment.invoice_payload)
+        except Exception:
+            payload = {'user_id': message.from_user.id, 'amount': payment.total_amount}
+        uid = int(payload.get('user_id') or message.from_user.id)
+        amount = int(payment.total_amount or payload.get('amount') or 0)
+        conn = sqlite3.connect(DB_PATH); c = conn.cursor()
+        c.execute('SELECT id,status FROM deposits WHERE invoice_id=?', (payment.invoice_payload,))
+        row = c.fetchone()
+        if row and row[1] != 'paid':
+            dep_id = row[0]
+            c.execute('UPDATE deposits SET status=?, telegram_payment_charge_id=? WHERE id=?', ('paid', payment.telegram_payment_charge_id, dep_id))
+            c.execute('UPDATE players SET stars_balance=COALESCE(stars_balance,0)+? WHERE user_id=?', (amount, uid))
+            c.execute('INSERT INTO transactions (user_id,type,amount,currency) VALUES (?,?,?,?)', (uid, 'stars_deposit', amount, 'STARS'))
+            conn.commit(); conn.close()
+            award_referral(uid, amount, 'STARS')
+        else:
+            conn.close()
+        await message.answer(f'✅ Пополнение на {amount} Stars зачислено')
     await dp.start_polling(bot)
 
 if __name__=='__main__':
