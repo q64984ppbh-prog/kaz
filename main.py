@@ -2,7 +2,7 @@ import json, random, time, logging, threading, asyncio, secrets, sqlite3, reques
 from pathlib import Path
 from typing import Dict
 from dataclasses import dataclass, field
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, make_response
 from flask_cors import CORS
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
@@ -252,7 +252,11 @@ CORS(app)
 
 @app.route('/')
 def index():
-    return send_from_directory('templates', 'index.html')
+    response = make_response(send_from_directory('templates', 'index.html'))
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 @app.route('/terms')
 def terms(): return "<h1>Terms of Use</h1><p>TopGift Crash game terms.</p>"
