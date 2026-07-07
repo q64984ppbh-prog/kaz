@@ -200,6 +200,7 @@ def coingecko_rate_loop():
         time.sleep(300)
 
 MAX_CRASH_MULTIPLIER = 25.0
+TARGET_RTP = 0.92
 
 def make_round_seeds():
     server_seed = secrets.token_hex(32)
@@ -209,7 +210,22 @@ def make_round_seeds():
     return server_seed, client_seed, salt, server_seed_hash
 
 def generate_crash_point(server_seed=None, client_seed=None, salt=None, bonus_round=False):
-    return round(1.0 + secrets.randbelow(int((MAX_CRASH_MULTIPLIER - 1.0) * 100) + 1) / 100, 2)
+    seed = f'{server_seed or secrets.token_hex(16)}:{client_seed or ""}:{salt or ""}'.encode()
+    digest = hmac.new(str(salt or 'topgift').encode(), seed, hashlib.sha256).hexdigest()
+    roll = int(digest[:13], 16) / float(0xFFFFFFFFFFFFF)
+    if roll < (1.0 - TARGET_RTP):
+        return 1.00
+    point = TARGET_RTP / max(1e-12, 1.0 - roll)
+    return round(max(1.0, min(MAX_CRASH_MULTIPLIER, point)), 2)
+
+def multiplier_tick_delay(multiplier):
+    if multiplier < 2.0:
+        return 0.08
+    if multiplier < 3.0:
+        return 0.05
+    if multiplier < 5.0:
+        return 0.045
+    return max(0.012, 0.045 - (int(multiplier) - 4) * 0.003)
 
 @dataclass
 class GameState:
@@ -394,29 +410,34 @@ def referral():
 
 @app.route('/api/create_withdrawal', methods=['POST'])
 def create_withdrawal():
-    data = request.json or {}; uid = data.get('user_id'); amt = float(data.get('amount', 0))
-    if amt <= 0: return jsonify({'status':'error','message':'Invalid amount'})
+    data = request.json or {}; uid = data.get('user_id'); amt = float(data.get('amount', 0)); currency = (data.get('currency') or 'TON').upper()
+    if currency not in ('TON','USDT','STARS') or amt <= 0: return jsonify({'status':'error','message':'Invalid amount'})
     p = get_player(uid)
-    if not p or amt > float(p.get('balance') or 0): return jsonify({'status':'error','message':'Недостаточно средств'})
-    update_player(uid, balance=float(p['balance']) - amt)
+    balance_key = 'stars_balance' if currency == 'STARS' else 'balance'
+    debit_amount = convert_crypto_to_ton('USDT', amt) if currency == 'USDT' else amt
+    if not p or debit_amount > float(p.get(balance_key) or 0): return jsonify({'status':'error','message':'Недостаточно средств'})
+    update_player(uid, **{balance_key: float(p.get(balance_key) or 0) - debit_amount})
     spend_id = f'wd_{uid}_{secrets.token_hex(8)}'
-    conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('INSERT INTO withdrawals (user_id, amount, transfer_id, status) VALUES (?,?,?,?)', (uid, amt, spend_id, 'pending')); wid=c.lastrowid; conn.commit(); conn.close()
+    conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('INSERT INTO withdrawals (user_id, amount, transfer_id, status) VALUES (?,?,?,?)', (uid, amt, spend_id, 'pending')); wid=c.lastrowid; c.execute('INSERT INTO transactions (user_id, type, amount, currency) VALUES (?,?,?,?)', (uid, 'withdrawal_request', -amt, currency)); conn.commit(); conn.close()
+    if currency == 'STARS':
+        fresh = get_player(uid) or {}
+        return jsonify({'status':'ok','balance':fresh.get('balance') or 0,'stars_balance':fresh.get('stars_balance') or 0})
     headers = {'Crypto-Pay-API-Token': CRYPTOBOT_TOKEN}
-    payload = {'user_id': uid, 'asset': 'TON', 'amount': str(round(amt, 6)), 'spend_id': spend_id, 'comment': 'TopGift withdrawal'}
+    payload = {'user_id': uid, 'asset': currency, 'amount': str(round(amt, 6)), 'spend_id': spend_id, 'comment': 'TopGift withdrawal'}
     try:
         r = requests.post(f'{CRYPTOBOT_API}/transfer', headers=headers, json=payload, timeout=12)
         js = r.json()
         if r.status_code == 200 and js.get('ok'):
-            conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('UPDATE withdrawals SET status=? WHERE id=?', ('paid', wid)); c.execute('INSERT INTO transactions (user_id, type, amount) VALUES (?,?,?)', (uid, 'withdrawal', -amt)); conn.commit(); conn.close()
-            return jsonify({'status':'ok','balance':float(p['balance'])-amt})
+            conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('UPDATE withdrawals SET status=? WHERE id=?', ('paid', wid)); c.execute('INSERT INTO transactions (user_id, type, amount, currency) VALUES (?,?,?,?)', (uid, 'withdrawal', -amt, currency)); conn.commit(); conn.close()
+            fresh=get_player(uid) or {}; return jsonify({'status':'ok','balance':fresh.get('balance') or 0,'stars_balance':fresh.get('stars_balance') or 0})
         raise RuntimeError(js.get('error') or js)
     except Exception as e:
         logger.error(f'CryptoBot transfer error: {e}')
         fresh = get_player(uid) or {'balance': 0}
-        update_player(uid, balance=float(fresh.get('balance') or 0) + amt)
+        update_player(uid, **{balance_key: float(fresh.get(balance_key) or 0) + debit_amount})
         conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('UPDATE withdrawals SET status=? WHERE id=?', ('failed', wid)); conn.commit(); conn.close()
         notify_user(uid, '⚡️ <b>Ошибка вывода</b>\nСредства возвращены на ваш баланс', {'inline_keyboard': [[{'text':'Поддержка','url':'https://t.me/killowcode'}]]})
-        return jsonify({'status':'error','message':'Ошибка вывода','balance':float(fresh.get('balance') or 0)+amt})
+        fresh=get_player(uid) or {}; return jsonify({'status':'error','message':'Ошибка вывода','balance':fresh.get('balance') or 0,'stars_balance':fresh.get('stars_balance') or 0})
 
 @app.route('/api/transactions', methods=['POST'])
 def transactions():
@@ -464,7 +485,7 @@ def admin_balance():
 def admin_transactions():
     data=request.json or {}; admin_id=data.get('admin_id'); target=int(data.get('user_id') or 0)
     if not admin_required(admin_id): return jsonify({'status':'error','message':'Forbidden'}), 403
-    conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('SELECT type,amount,created_at,COALESCE(currency,"TON") FROM transactions WHERE user_id=? ORDER BY created_at DESC LIMIT 80',(target,)); txs=[{'type':r[0],'amount':r[1],'date':r[2],'currency':r[3]} for r in c.fetchall()]; conn.close()
+    conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('SELECT type,amount,created_at,COALESCE(currency,"TON") FROM transactions WHERE user_id=? ORDER BY created_at DESC LIMIT 5',(target,)); txs=[{'type':r[0],'amount':r[1],'date':r[2],'currency':r[3]} for r in c.fetchall()]; conn.close()
     return jsonify({'status':'ok','transactions':txs})
 
 @app.route('/api/admin/crash', methods=['POST'])
@@ -498,11 +519,8 @@ def run_game_loop():
         for i in range(10,0,-1): game_state.countdown=i; game_state.status='countdown'; time.sleep(1)
         bonus_round = not game_state.bets
         game_state.crash_point=generate_crash_point(game_state.server_seed, game_state.client_seed, game_state.salt, bonus_round); game_state.current_multiplier=1.0; game_state.status='flying'
-        st=time.time()
         while game_state.current_multiplier<game_state.crash_point:
-            elapsed=time.time()-st
-
-            game_state.current_multiplier=round(1.0 + 0.18 * (pow(1.42, elapsed) - 1.0), 2)
+            game_state.current_multiplier=round(min(game_state.crash_point, game_state.current_multiplier + 0.01), 2)
 
             for uid, bet in list(game_state.bets.items()):
                 target = float(bet.get('auto_cashout') or 0)
@@ -515,7 +533,7 @@ def run_game_loop():
                     bet['multiplier'] = target
             if game_state.force_crash or game_state.current_multiplier>=game_state.crash_point:
                 game_state.current_multiplier=game_state.crash_point; break
-            time.sleep(max(0.02,0.06-game_state.current_multiplier*0.002))
+            time.sleep(multiplier_tick_delay(game_state.current_multiplier))
         game_state.revealed_server_seed = game_state.server_seed
         game_state.revealed_salt = game_state.salt
         game_state.status='exploding'
@@ -547,14 +565,95 @@ async def run_bot():
         kb=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Play", web_app=WebAppInfo(url=WEBAPP_URL))]])
         await message.answer("<b>Welcome to UP! №1 Crash Game in Telegram</b>", reply_markup=kb)
 
+    admin_sessions = {}
+
+    def admin_panel_kb():
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text='Пополнить', callback_data='adm:add'), InlineKeyboardButton(text='Снять', callback_data='adm:subtract')],
+            [InlineKeyboardButton(text='Забанить', callback_data='adm:ban'), InlineKeyboardButton(text='Разбанить', callback_data='adm:unban')],
+            [InlineKeyboardButton(text='Транзакции', callback_data='adm:tx'), InlineKeyboardButton(text='Крашнуть', callback_data='adm:crash')],
+            [InlineKeyboardButton(text='Рассылка', callback_data='adm:broadcast')],
+        ])
+
+    def currency_kb(action):
+        return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text='TON', callback_data=f'admcur:{action}:TON'), InlineKeyboardButton(text='Звезды', callback_data=f'admcur:{action}:STARS')]])
+
     @dp.message(Command('admin'))
     async def cmd_admin(message: types.Message):
         if message.from_user.id != ADMIN_USER_ID:
             return
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text='Открыть админ-действия', callback_data='admin_help')],
-        ])
-        await message.answer('<b>Админ панель</b>\nКоманды: /admin, /start. Управление пользователями доступно через API админ-панели бота.', reply_markup=kb)
+        await message.answer('<b>Панель админа</b>', reply_markup=admin_panel_kb())
+
+    @dp.callback_query(lambda c: c.data and c.data.startswith('adm:'))
+    async def admin_action(cb: types.CallbackQuery):
+        if cb.from_user.id != ADMIN_USER_ID:
+            await cb.answer('Нет доступа', show_alert=True); return
+        action = cb.data.split(':', 1)[1]
+        if action in ('add', 'subtract'):
+            admin_sessions[cb.from_user.id] = {'action': action, 'step': 'currency'}
+            await cb.message.answer('Что выдать/снять с баланса?', reply_markup=currency_kb(action))
+        elif action in ('ban', 'unban', 'tx'):
+            admin_sessions[cb.from_user.id] = {'action': action, 'step': 'user_id'}
+            await cb.message.answer('Введите Telegram ID пользователя')
+        elif action == 'broadcast':
+            admin_sessions[cb.from_user.id] = {'action': action, 'step': 'text'}
+            await cb.message.answer('Введите текст рассылки всем пользователям бота')
+        elif action == 'crash':
+            if game_state.status == 'flying':
+                game_state.force_crash = True
+                game_state.crash_point = min(game_state.crash_point or game_state.current_multiplier, max(1.0, game_state.current_multiplier))
+                await cb.message.answer('💥 Ракета взрывается. Все, кто не забрал ставку, проигрывают.')
+            else:
+                await cb.message.answer('Раунд сейчас не летит.')
+        await cb.answer()
+
+    @dp.callback_query(lambda c: c.data and c.data.startswith('admcur:'))
+    async def admin_currency(cb: types.CallbackQuery):
+        if cb.from_user.id != ADMIN_USER_ID:
+            await cb.answer('Нет доступа', show_alert=True); return
+        _, action, currency = cb.data.split(':')
+        admin_sessions[cb.from_user.id] = {'action': action, 'step': 'user_id', 'currency': currency}
+        await cb.message.answer(f'Выбрано: {currency}. Введите Telegram ID пользователя')
+        await cb.answer()
+
+    @dp.message(lambda m: m.from_user and m.from_user.id == ADMIN_USER_ID and m.from_user.id in admin_sessions)
+    async def admin_dialog(message: types.Message):
+        sess = admin_sessions.get(message.from_user.id, {})
+        action, step = sess.get('action'), sess.get('step')
+        text = (message.text or '').strip()
+        try:
+            if step == 'user_id':
+                sess['user_id'] = int(text); sess['step'] = 'amount' if action in ('add', 'subtract') else 'confirm'
+                if action in ('add', 'subtract'):
+                    await message.answer('Введите сумму пополнения / снятия баланса')
+                elif action in ('ban', 'unban'):
+                    update_player(sess['user_id'], is_banned=1 if action == 'ban' else 0)
+                    admin_sessions.pop(message.from_user.id, None)
+                    await message.answer('Готово.', reply_markup=admin_panel_kb())
+                elif action == 'tx':
+                    conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('SELECT type,amount,created_at,COALESCE(currency,"TON") FROM transactions WHERE user_id=? ORDER BY created_at DESC LIMIT 5',(sess['user_id'],)); rows=c.fetchall(); conn.close()
+                    body='\n'.join([f'{r[2]} — {r[0]}: {r[1]} {r[3]}' for r in rows]) or 'Транзакций нет'
+                    admin_sessions.pop(message.from_user.id, None)
+                    await message.answer(body, reply_markup=admin_panel_kb())
+            elif step == 'amount':
+                amount = float(text.replace(',', '.')); currency=sess.get('currency','TON'); key='stars_balance' if currency=='STARS' else 'balance'
+                p=get_player(sess['user_id']) or {}; current=float(p.get(key) or 0); new_balance=current+amount if action=='add' else max(0,current-amount)
+                update_player(sess['user_id'], **{key:new_balance})
+                conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('INSERT INTO transactions (user_id,type,amount,currency) VALUES (?,?,?,?)',(sess['user_id'],'admin_'+action, amount if action=='add' else -amount, currency)); conn.commit(); conn.close()
+                admin_sessions.pop(message.from_user.id, None)
+                await message.answer(f'Готово. Новый баланс {currency}: {new_balance:.0f}' if currency=='STARS' else f'Готово. Новый баланс {currency}: {new_balance:.2f}', reply_markup=admin_panel_kb())
+            elif step == 'text' and action == 'broadcast':
+                conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('SELECT user_id FROM players WHERE COALESCE(is_banned,0)=0'); users=[r[0] for r in c.fetchall()]; conn.close()
+                sent=0
+                for uid in users:
+                    try:
+                        await bot.send_message(uid, text); sent += 1
+                    except Exception:
+                        pass
+                admin_sessions.pop(message.from_user.id, None)
+                await message.answer(f'Рассылка завершена. Отправлено: {sent}', reply_markup=admin_panel_kb())
+        except Exception as e:
+            await message.answer(f'Ошибка: {e}. Попробуйте ещё раз или откройте /admin')
 
     @dp.pre_checkout_query()
     async def pre_checkout(query: types.PreCheckoutQuery):
