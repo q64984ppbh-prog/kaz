@@ -278,8 +278,8 @@ def create_crypto_deposit():
         logger.error(f'CryptoBot error: {e}')
     return jsonify({'status':'error','message':'CryptoBot error'})
 
-@app.route('/api/deposit_status', methods=['POST'])
-def deposit_status():
+@app.route('/api/deposit_status', methods=['POST'], endpoint='deposit_status_api')
+def check_deposit_status():
     req = request.json; dep_id = req.get('deposit_id')
     conn = sqlite3.connect(DB_PATH); c = conn.cursor()
     c.execute("SELECT user_id, amount_game, amount_ton, invoice_id, status, method, COALESCE(asset,'TON') FROM deposits WHERE id=?", (dep_id,))
