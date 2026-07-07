@@ -135,7 +135,8 @@ def credit_deposit(dep_id, user_id, amount):
     conn = sqlite3.connect(DB_PATH); c = conn.cursor()
     c.execute('SELECT COALESCE(asset,"TON") FROM deposits WHERE id=?', (dep_id,))
     asset_row = c.fetchone()
-    currency = (asset_row[0] if asset_row else 'TON').upper()
+    asset = (asset_row[0] if asset_row else 'TON').upper()
+    currency = 'STARS' if asset == 'STARS' else 'TON'
     balance_col = 'stars_balance' if currency == 'STARS' else 'balance'
     c.execute('UPDATE deposits SET status=? WHERE id=? AND status!=?', ('paid', dep_id, 'paid'))
     changed = c.rowcount
@@ -150,6 +151,20 @@ def credit_deposit(dep_id, user_id, amount):
             c.execute('INSERT INTO transactions (user_id, type, amount, currency) VALUES (?,?,?,?)', (row[0], 'referral_bonus', reward, currency))
     conn.commit(); conn.close()
     return bool(changed)
+
+
+def award_referral(user_id, amount, currency='TON'):
+    currency = (currency or 'TON').upper()
+    balance_col = 'stars_balance' if currency == 'STARS' else 'balance'
+    conn = sqlite3.connect(DB_PATH); c = conn.cursor()
+    c.execute('SELECT referrer_id FROM players WHERE user_id=?', (user_id,))
+    row = c.fetchone()
+    if row and row[0]:
+        reward = round(float(amount or 0) * REF_REWARD_RATE, 6)
+        if reward > 0:
+            c.execute(f'UPDATE players SET {balance_col}={balance_col}+?, ref_balance=COALESCE(ref_balance,0)+? WHERE user_id=?', (reward, reward, row[0]))
+            c.execute('INSERT INTO transactions (user_id, type, amount, currency) VALUES (?,?,?,?)', (row[0], 'referral_bonus', reward, currency))
+    conn.commit(); conn.close()
 
 def get_ton_usd_rate():
     if time.time() - ton_usd_rate.get('updated_at', 0) < 300 and ton_usd_rate.get('value'):
@@ -498,11 +513,9 @@ def run_game_loop():
         st=time.time()
         while game_state.current_multiplier<game_state.crash_point:
             elapsed=time.time()-st
-<<<<<<< ours
-            game_state.current_multiplier=round(1.0 + 0.06 * (pow(1.38, elapsed) - 1.0), 2)
-=======
+
             game_state.current_multiplier=round(1.0 + 0.18 * (pow(1.42, elapsed) - 1.0), 2)
->>>>>>> theirs
+
             for uid, bet in list(game_state.bets.items()):
                 target = float(bet.get('auto_cashout') or 0)
                 if target and not bet['cashed_out'] and game_state.current_multiplier >= target:
