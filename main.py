@@ -274,6 +274,15 @@ def init():
         'game_state':{'status':game_state.status,'multiplier':game_state.current_multiplier,'countdown':game_state.countdown,'last_results':game_state.last_results,'crash_point':game_state.crash_point if game_state.status=='crashed' else None},
         'has_bet':uid in game_state.bets or uid in game_state.pending_bets,'current_bet':(game_state.bets.get(uid) or game_state.pending_bets.get(uid) or {}).get('amount',0)})
 
+
+@app.route('/api/balance', methods=['POST'])
+def balance_api():
+    uid=(request.json or {}).get('user_id')
+    p=get_player(uid)
+    if not p: return jsonify({'status':'error','message':'Пользователь не найден'}), 404
+    conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('SELECT COUNT(*) FROM referrals WHERE referrer_id=?',(uid,)); ref_count=c.fetchone()[0]; conn.close()
+    return jsonify({'status':'ok','balance':p.get('balance') or 0,'stars_balance':p.get('stars_balance') or 0,'ref_balance':p.get('ref_balance') or 0,'ref_count':ref_count})
+
 @app.route('/api/save_wallet', methods=['POST'])
 def save_wallet():
     data = request.json; uid = data.get('user_id'); addr = data.get('address','')
@@ -289,7 +298,9 @@ def place_bet():
     if not p or p.get('is_banned'): return jsonify({'status':'error','message':'Пользователь заблокирован'})
     balance_key = 'stars_balance' if currency == 'STARS' else 'balance'
     if game_state.status != 'countdown': return jsonify({'status':'error','message':'Ставки принимаются только во время отсчета'})
-    if amt<=0 or amt>float(p.get(balance_key) or 0): return jsonify({'status':'error','message':'Недостаточно средств'})
+    min_bet = 10 if currency == 'STARS' else 0.1
+    if amt < min_bet: return jsonify({'status':'error','message':'Минимальная ставка 10 звезд' if currency == 'STARS' else 'Минимальная ставка 0.1 TON'})
+    if amt>float(p.get(balance_key) or 0): return jsonify({'status':'error','message':'Недостаточно средств'})
     if uid in game_state.bets or uid in game_state.pending_bets: return jsonify({'status':'error','message':'Already bet'})
     update_player(uid, **{balance_key: float(p.get(balance_key) or 0)-amt})
     award_referral(uid, amt, currency)
@@ -353,7 +364,7 @@ def create_deposit():
 def create_crypto_deposit():
     data = request.json; uid = data.get('user_id'); amt = float(data.get('amount',0))
     coin = (data.get('coin') or 'TON').upper()
-    if coin not in ('TON', 'USDT') or amt <= 0:
+    if coin != 'TON' or amt <= 0:
         return jsonify({'status':'error','message':'Invalid'})
     headers = {'Crypto-Pay-API-Token': CRYPTOBOT_TOKEN}
     payload = {'amount': str(amt), 'currency_type': 'crypto', 'asset': coin, 'description': f'TopGift deposit {uid}', 'payload': f'{uid}:{secrets.token_hex(6)}'}
@@ -378,7 +389,8 @@ def check_deposit_status():
     row = c.fetchone(); conn.close()
     if not row: return jsonify({'status':'not_found'})
     user_id, amount_game, amount_ton, invoice_id, status, method, asset = row
-    if status == 'paid': return jsonify({'status':'paid'})
+    if status == 'paid':
+        p=get_player(user_id) or {}; return jsonify({'status':'paid','balance':p.get('balance') or 0,'stars_balance':p.get('stars_balance') or 0,'ref_balance':p.get('ref_balance') or 0})
     if method == 'telegram_stars':
         return jsonify({'status':'pending'})
     if method == 'cryptobot':
@@ -389,14 +401,14 @@ def check_deposit_status():
             items = js.get('result', {}).get('items', []) if js.get('ok') else []
             if items and items[0].get('status') == 'paid':
                 credit_deposit(dep_id, user_id, convert_crypto_to_ton(items[0].get('asset') or asset, items[0].get('amount') or amount_game))
-                return jsonify({'status':'paid'})
+                p=get_player(user_id) or {}; return jsonify({'status':'paid','balance':p.get('balance') or 0,'stars_balance':p.get('stars_balance') or 0,'ref_balance':p.get('ref_balance') or 0})
         except Exception as e: logger.error(f'Status check error: {e}')
     else:
         try:
             r=requests.get(f'{TONAPI_URL}/blockchain/accounts/{ADMIN_WALLET}/transactions', headers={'Authorization': f'Bearer {TONAPI_KEY}'}, params={'limit':20}, timeout=10)
             if r.status_code == 200 and invoice_id in r.text:
                 credit_deposit(dep_id, user_id, amount_game)
-                return jsonify({'status':'paid'})
+                p=get_player(user_id) or {}; return jsonify({'status':'paid','balance':p.get('balance') or 0,'stars_balance':p.get('stars_balance') or 0,'ref_balance':p.get('ref_balance') or 0})
         except Exception as e: logger.error(f'TON status error: {e}')
     return jsonify({'status':'pending'})
 
@@ -411,7 +423,8 @@ def referral():
 @app.route('/api/create_withdrawal', methods=['POST'])
 def create_withdrawal():
     data = request.json or {}; uid = data.get('user_id'); amt = float(data.get('amount', 0)); currency = (data.get('currency') or 'TON').upper()
-    if currency not in ('TON','USDT','STARS') or amt <= 0: return jsonify({'status':'error','message':'Invalid amount'})
+    if currency == 'STARS': return jsonify({'status':'error','message':'Вывод звезд пока недоступен'})
+    if currency != 'TON' or amt <= 0: return jsonify({'status':'error','message':'Invalid amount'})
     p = get_player(uid)
     balance_key = 'stars_balance' if currency == 'STARS' else 'balance'
     debit_amount = convert_crypto_to_ton('USDT', amt) if currency == 'USDT' else amt
@@ -437,7 +450,7 @@ def create_withdrawal():
         update_player(uid, **{balance_key: float(fresh.get(balance_key) or 0) + debit_amount})
         conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('UPDATE withdrawals SET status=? WHERE id=?', ('failed', wid)); conn.commit(); conn.close()
         notify_user(uid, '⚡️ <b>Ошибка вывода</b>\nСредства возвращены на ваш баланс', {'inline_keyboard': [[{'text':'Поддержка','url':'https://t.me/killowcode'}]]})
-        fresh=get_player(uid) or {}; return jsonify({'status':'error','message':'Ошибка вывода','balance':fresh.get('balance') or 0,'stars_balance':fresh.get('stars_balance') or 0})
+        fresh=get_player(uid) or {}; return jsonify({'status':'error','message':'Произошла ошибка при выводе, попробуйте позже','balance':fresh.get('balance') or 0,'stars_balance':fresh.get('stars_balance') or 0})
 
 @app.route('/api/transactions', methods=['POST'])
 def transactions():
@@ -582,7 +595,7 @@ async def run_bot():
     async def cmd_admin(message: types.Message):
         if message.from_user.id != ADMIN_USER_ID:
             return
-        await message.answer('<b>Панель админа</b>', reply_markup=admin_panel_kb())
+        await message.answer('<b>⚙️ Админ панель TopGift</b>\n\n<blockquote><i>Выберите действие ниже. Для пополнений и снятий бот пошагово запросит валюту, Telegram ID и сумму.</i></blockquote>', reply_markup=admin_panel_kb())
 
     @dp.callback_query(lambda c: c.data and c.data.startswith('adm:'))
     async def admin_action(cb: types.CallbackQuery):
@@ -591,20 +604,20 @@ async def run_bot():
         action = cb.data.split(':', 1)[1]
         if action in ('add', 'subtract'):
             admin_sessions[cb.from_user.id] = {'action': action, 'step': 'currency'}
-            await cb.message.answer('Что выдать/снять с баланса?', reply_markup=currency_kb(action))
+            await cb.message.answer('<b>💰 Баланс пользователя</b>\n<blockquote><i>Выберите валюту для операции.</i></blockquote>', reply_markup=currency_kb(action))
         elif action in ('ban', 'unban', 'tx'):
             admin_sessions[cb.from_user.id] = {'action': action, 'step': 'user_id'}
-            await cb.message.answer('Введите Telegram ID пользователя')
+            await cb.message.answer('<b>👤 Введите Telegram ID пользователя</b>\n<blockquote><i>Например: <code>8374183799</code></i></blockquote>')
         elif action == 'broadcast':
             admin_sessions[cb.from_user.id] = {'action': action, 'step': 'text'}
-            await cb.message.answer('Введите текст рассылки всем пользователям бота')
+            await cb.message.answer('<b>📣 Рассылка</b>\n<blockquote><i>Отправьте текст сообщения. Можно использовать HTML: &lt;b&gt;, &lt;i&gt;, &lt;blockquote&gt; и переносы строк.</i></blockquote>')
         elif action == 'crash':
             if game_state.status == 'flying':
                 game_state.force_crash = True
                 game_state.crash_point = min(game_state.crash_point or game_state.current_multiplier, max(1.0, game_state.current_multiplier))
-                await cb.message.answer('💥 Ракета взрывается. Все, кто не забрал ставку, проигрывают.')
+                await cb.message.answer('<b>💥 Ракетка крашнута</b>\n<blockquote><i>Все незабранные ставки проигрывают.</i></blockquote>')
             else:
-                await cb.message.answer('Раунд сейчас не летит.')
+                await cb.message.answer('<b>⏳ Раунд сейчас не летит</b>\n<blockquote><i>Краш доступен только во время полёта.</i></blockquote>')
         await cb.answer()
 
     @dp.callback_query(lambda c: c.data and c.data.startswith('admcur:'))
@@ -613,7 +626,7 @@ async def run_bot():
             await cb.answer('Нет доступа', show_alert=True); return
         _, action, currency = cb.data.split(':')
         admin_sessions[cb.from_user.id] = {'action': action, 'step': 'user_id', 'currency': currency}
-        await cb.message.answer(f'Выбрано: {currency}. Введите Telegram ID пользователя')
+        await cb.message.answer(f'<b>✅ Выбрано: {currency}</b>\n<blockquote><i>Введите Telegram ID пользователя.</i></blockquote>')
         await cb.answer()
 
     @dp.message(lambda m: m.from_user and m.from_user.id == ADMIN_USER_ID and m.from_user.id in admin_sessions)
@@ -625,14 +638,14 @@ async def run_bot():
             if step == 'user_id':
                 sess['user_id'] = int(text); sess['step'] = 'amount' if action in ('add', 'subtract') else 'confirm'
                 if action in ('add', 'subtract'):
-                    await message.answer('Введите сумму пополнения / снятия баланса')
+                    await message.answer('<b>✍️ Введите сумму</b>\n<blockquote><i>Можно использовать точку или запятую.</i></blockquote>')
                 elif action in ('ban', 'unban'):
                     update_player(sess['user_id'], is_banned=1 if action == 'ban' else 0)
                     admin_sessions.pop(message.from_user.id, None)
-                    await message.answer('Готово.', reply_markup=admin_panel_kb())
+                    await message.answer('<b>✅ Готово</b>\n<blockquote><i>Статус пользователя обновлён.</i></blockquote>', reply_markup=admin_panel_kb())
                 elif action == 'tx':
                     conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('SELECT type,amount,created_at,COALESCE(currency,"TON") FROM transactions WHERE user_id=? ORDER BY created_at DESC LIMIT 5',(sess['user_id'],)); rows=c.fetchall(); conn.close()
-                    body='\n'.join([f'{r[2]} — {r[0]}: {r[1]} {r[3]}' for r in rows]) or 'Транзакций нет'
+                    body='<b>🧾 Последние транзакции</b>\n' + ('\n'.join([f'<blockquote><b>{r[0]}</b> — <code>{r[1]} {r[3]}</code>\n<i>{r[2]}</i></blockquote>' for r in rows]) or '<blockquote><i>Транзакций нет</i></blockquote>')
                     admin_sessions.pop(message.from_user.id, None)
                     await message.answer(body, reply_markup=admin_panel_kb())
             elif step == 'amount':
@@ -641,7 +654,7 @@ async def run_bot():
                 update_player(sess['user_id'], **{key:new_balance})
                 conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('INSERT INTO transactions (user_id,type,amount,currency) VALUES (?,?,?,?)',(sess['user_id'],'admin_'+action, amount if action=='add' else -amount, currency)); conn.commit(); conn.close()
                 admin_sessions.pop(message.from_user.id, None)
-                await message.answer(f'Готово. Новый баланс {currency}: {new_balance:.0f}' if currency=='STARS' else f'Готово. Новый баланс {currency}: {new_balance:.2f}', reply_markup=admin_panel_kb())
+                await message.answer((f'<b>✅ Баланс обновлён</b>\n<blockquote><i>Новый баланс {currency}:</i> <code>{new_balance:.0f}</code></blockquote>' if currency=='STARS' else f'<b>✅ Баланс обновлён</b>\n<blockquote><i>Новый баланс {currency}:</i> <code>{new_balance:.2f}</code></blockquote>'), reply_markup=admin_panel_kb())
             elif step == 'text' and action == 'broadcast':
                 conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('SELECT user_id FROM players WHERE COALESCE(is_banned,0)=0'); users=[r[0] for r in c.fetchall()]; conn.close()
                 sent=0
@@ -651,9 +664,9 @@ async def run_bot():
                     except Exception:
                         pass
                 admin_sessions.pop(message.from_user.id, None)
-                await message.answer(f'Рассылка завершена. Отправлено: {sent}', reply_markup=admin_panel_kb())
+                await message.answer(f'<b>✅ Рассылка завершена</b>\n<blockquote><i>Отправлено:</i> <code>{sent}</code></blockquote>', reply_markup=admin_panel_kb())
         except Exception as e:
-            await message.answer(f'Ошибка: {e}. Попробуйте ещё раз или откройте /admin')
+            await message.answer(f'<b>❌ Ошибка</b>\n<blockquote><i>{e}</i>\nПопробуйте ещё раз или откройте /admin.</blockquote>')
 
     @dp.pre_checkout_query()
     async def pre_checkout(query: types.PreCheckoutQuery):
