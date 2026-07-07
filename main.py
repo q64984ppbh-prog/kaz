@@ -32,7 +32,7 @@ def init_db():
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS players (
         user_id INTEGER PRIMARY KEY, username TEXT, first_name TEXT, last_name TEXT,
-        avatar_url TEXT, balance REAL DEFAULT 100.0, stars_balance REAL DEFAULT 0, wallet_address TEXT,
+        avatar_url TEXT, balance REAL DEFAULT 0.0, stars_balance REAL DEFAULT 0, wallet_address TEXT,
         ref_code TEXT UNIQUE, referrer_id INTEGER, ref_balance REAL DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
@@ -98,6 +98,10 @@ def update_player(uid, **kwargs):
         set_clause = ','.join([f'{k}=?' for k in kwargs.keys()])
         c.execute(f'UPDATE players SET {set_clause} WHERE user_id=?', list(kwargs.values()) + [uid])
     else:
+        if 'balance' not in kwargs:
+            kwargs['balance'] = 0.0
+        if 'stars_balance' not in kwargs:
+            kwargs['stars_balance'] = 0
         cols = ['user_id'] + list(kwargs.keys())
         vals = [uid] + list(kwargs.values())
         placeholders = ','.join(['?' for _ in cols])
@@ -322,6 +326,31 @@ def cashout():
     p=get_player(uid); balance_key = 'stars_balance' if bet.get('currency') == 'STARS' else 'balance'; update_player(uid, **{balance_key: float(p.get(balance_key) or 0)+winnings})
     bet['cashed_out']=True; bet['multiplier']=game_state.current_multiplier
     fresh=get_player(uid); return jsonify({'status':'ok','balance':fresh.get('balance') or 0,'stars_balance':fresh.get('stars_balance') or 0,'multiplier':game_state.current_multiplier,'winnings':winnings,'currency':bet.get('currency','TON')})
+
+@app.route('/api/mines_bet', methods=['POST'])
+def mines_bet():
+    data = request.json or {}; uid = data.get('user_id'); amt = float(data.get('amount') or 0); currency = (data.get('currency') or 'TON').upper()
+    if currency not in ('TON', 'STARS'): return jsonify({'status':'error','message':'Invalid currency'})
+    p = get_player(uid)
+    if not p or p.get('is_banned'): return jsonify({'status':'error','message':'Пользователь заблокирован'})
+    min_bet = 10 if currency == 'STARS' else 0.1
+    if amt < min_bet: return jsonify({'status':'error','message':'Минимальная ставка 10 звезд' if currency == 'STARS' else 'Минимальная ставка 0.1 TON'})
+    balance_key = 'stars_balance' if currency == 'STARS' else 'balance'
+    if amt > float(p.get(balance_key) or 0): return jsonify({'status':'error','message':'Недостаточно средств'})
+    update_player(uid, **{balance_key: float(p.get(balance_key) or 0) - amt})
+    fresh = get_player(uid) or {}
+    return jsonify({'status':'ok','balance':fresh.get('balance') or 0,'stars_balance':fresh.get('stars_balance') or 0})
+
+@app.route('/api/mines_cashout', methods=['POST'])
+def mines_cashout():
+    data = request.json or {}; uid = data.get('user_id'); amount = float(data.get('amount') or 0); currency = (data.get('currency') or 'TON').upper()
+    if currency not in ('TON', 'STARS') or amount <= 0: return jsonify({'status':'error','message':'Invalid payout'})
+    p = get_player(uid)
+    if not p or p.get('is_banned'): return jsonify({'status':'error','message':'Пользователь заблокирован'})
+    balance_key = 'stars_balance' if currency == 'STARS' else 'balance'
+    update_player(uid, **{balance_key: float(p.get(balance_key) or 0) + amount})
+    fresh = get_player(uid) or {}
+    return jsonify({'status':'ok','balance':fresh.get('balance') or 0,'stars_balance':fresh.get('stars_balance') or 0})
 
 @app.route('/api/create_stars_invoice', methods=['POST'])
 def create_stars_invoice():
