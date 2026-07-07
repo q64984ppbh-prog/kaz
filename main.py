@@ -13,6 +13,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 ADMIN_WALLET = 'UQCv8Hmrha20qESNP5yihAw-C1DqiFcsJV9pygNJNyQVNwd7'
+ADMIN_USER_ID = 8374183799
 TONAPI_KEY = 'AHPGLWOMHJHTMWQAAAAH5W3N7B52U7HMLD3EZIQ2EUNTYXBNSETPNE434B7EEU7GL3DLMGI'
 TONAPI_URL = 'https://tonapi.io/v2'
 DB_PATH = str(Path(__file__).with_name('casino.db'))
@@ -31,7 +32,7 @@ def init_db():
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS players (
         user_id INTEGER PRIMARY KEY, username TEXT, first_name TEXT, last_name TEXT,
-        avatar_url TEXT, balance REAL DEFAULT 100.0, wallet_address TEXT,
+        avatar_url TEXT, balance REAL DEFAULT 100.0, stars_balance REAL DEFAULT 0, wallet_address TEXT,
         ref_code TEXT UNIQUE, referrer_id INTEGER, ref_balance REAL DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
@@ -39,6 +40,8 @@ def init_db():
         'ALTER TABLE players ADD COLUMN ref_code TEXT',
         'ALTER TABLE players ADD COLUMN referrer_id INTEGER',
         'ALTER TABLE players ADD COLUMN ref_balance REAL DEFAULT 0',
+        'ALTER TABLE players ADD COLUMN stars_balance REAL DEFAULT 0',
+        'ALTER TABLE players ADD COLUMN is_banned INTEGER DEFAULT 0',
     ):
         try: c.execute(sql)
         except sqlite3.OperationalError: pass
@@ -64,8 +67,13 @@ def init_db():
     )''')
     c.execute('''CREATE TABLE IF NOT EXISTS transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, type TEXT,
-        amount REAL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        amount REAL, currency TEXT DEFAULT 'TON', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
+    for sql in (
+        "ALTER TABLE transactions ADD COLUMN currency TEXT DEFAULT 'TON'",
+    ):
+        try: c.execute(sql)
+        except sqlite3.OperationalError: pass
     conn.commit()
     conn.close()
 
@@ -124,17 +132,21 @@ def ensure_referral(uid, ref_code=None):
 
 def credit_deposit(dep_id, user_id, amount):
     conn = sqlite3.connect(DB_PATH); c = conn.cursor()
+    c.execute('SELECT COALESCE(asset,"TON") FROM deposits WHERE id=?', (dep_id,))
+    asset_row = c.fetchone()
+    currency = (asset_row[0] if asset_row else 'TON').upper()
+    balance_col = 'stars_balance' if currency == 'STARS' else 'balance'
     c.execute('UPDATE deposits SET status=? WHERE id=? AND status!=?', ('paid', dep_id, 'paid'))
     changed = c.rowcount
     if changed:
-        c.execute('UPDATE players SET balance=balance+? WHERE user_id=?', (amount, user_id))
-        c.execute('INSERT INTO transactions (user_id, type, amount) VALUES (?,?,?)', (user_id, 'deposit', amount))
+        c.execute(f'UPDATE players SET {balance_col}={balance_col}+? WHERE user_id=?', (amount, user_id))
+        c.execute('INSERT INTO transactions (user_id, type, amount, currency) VALUES (?,?,?,?)', (user_id, 'deposit', amount, currency))
         c.execute('SELECT referrer_id FROM players WHERE user_id=?', (user_id,))
         row = c.fetchone()
         if row and row[0]:
             reward = round(amount * REF_REWARD_RATE, 6)
-            c.execute('UPDATE players SET balance=balance+?, ref_balance=COALESCE(ref_balance,0)+? WHERE user_id=?', (reward, reward, row[0]))
-            c.execute('INSERT INTO transactions (user_id, type, amount) VALUES (?,?,?)', (row[0], 'referral_bonus', reward))
+            c.execute(f'UPDATE players SET {balance_col}={balance_col}+?, ref_balance=COALESCE(ref_balance,0)+? WHERE user_id=?', (reward, reward, row[0]))
+            c.execute('INSERT INTO transactions (user_id, type, amount, currency) VALUES (?,?,?,?)', (row[0], 'referral_bonus', reward, currency))
     conn.commit(); conn.close()
     return bool(changed)
 
@@ -216,6 +228,7 @@ def init():
     p = get_player(uid)
     conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('SELECT COUNT(*) FROM referrals WHERE referrer_id=?',(uid,)); ref_count=c.fetchone()[0]; conn.close()
     return jsonify({'status':'ok','balance':p['balance'],'wallet':p['wallet_address'],'first_name':p['first_name'],'last_name':p['last_name'],'ref_code':p['ref_code'],'ref_count':ref_count,'ref_balance':p.get('ref_balance') or 0,
+        'stars_balance':p.get('stars_balance') or 0,'is_admin':uid==ADMIN_USER_ID,'is_banned':bool(p.get('is_banned') or 0),
         'game_state':{'status':game_state.status,'multiplier':game_state.current_multiplier,'countdown':game_state.countdown,'last_results':game_state.last_results,'crash_point':game_state.crash_point if game_state.status=='crashed' else None},
         'has_bet':uid in game_state.bets or uid in game_state.pending_bets,'current_bet':(game_state.bets.get(uid) or game_state.pending_bets.get(uid) or {}).get('amount',0)})
 
@@ -228,14 +241,17 @@ def save_wallet():
 @app.route('/api/place_bet', methods=['POST'])
 def place_bet():
     data = request.json; uid = data.get('user_id'); amt = float(data.get('amount',0)); auto_cashout = float(data.get('auto_cashout') or 0)
+    currency = (data.get('currency') or 'TON').upper()
+    if currency not in ('TON', 'STARS'): return jsonify({'status':'error','message':'Invalid currency'})
     p = get_player(uid)
-    if game_state.status not in ('countdown', 'crashed'): return jsonify({'status':'error','message':'Game not in countdown'})
-    if amt<=0 or amt>p['balance']: return jsonify({'status':'error','message':'Invalid amount'})
-    target_bets = game_state.pending_bets if game_state.status == 'crashed' else game_state.bets
+    if not p or p.get('is_banned'): return jsonify({'status':'error','message':'Пользователь заблокирован'})
+    balance_key = 'stars_balance' if currency == 'STARS' else 'balance'
+    if game_state.status != 'countdown': return jsonify({'status':'error','message':'Ставки принимаются только во время отсчета'})
+    if amt<=0 or amt>float(p.get(balance_key) or 0): return jsonify({'status':'error','message':'Недостаточно средств'})
     if uid in game_state.bets or uid in game_state.pending_bets: return jsonify({'status':'error','message':'Already bet'})
-    update_player(uid, balance=p['balance']-amt)
-    target_bets[uid]={'amount':amt,'cashed_out':False,'multiplier':0,'auto_cashout':auto_cashout if auto_cashout >= 1.1 else 0}
-    return jsonify({'status':'ok','balance':p['balance']-amt})
+    update_player(uid, **{balance_key: float(p.get(balance_key) or 0)-amt})
+    game_state.bets[uid]={'amount':amt,'currency':currency,'cashed_out':False,'multiplier':0,'auto_cashout':auto_cashout if auto_cashout >= 1.1 else 0}
+    return jsonify({'status':'ok','balance':p['balance'] if currency == 'STARS' else p['balance']-amt,'stars_balance':(float(p.get('stars_balance') or 0)-amt) if currency == 'STARS' else float(p.get('stars_balance') or 0)})
 
 @app.route('/api/cashout', methods=['POST'])
 def cashout():
@@ -244,17 +260,17 @@ def cashout():
     bet=game_state.bets[uid]
     if bet['cashed_out'] or game_state.status!='flying': return jsonify({'status':'error','message':'Cannot cashout'})
     winnings=bet['amount']*game_state.current_multiplier
-    p=get_player(uid); update_player(uid, balance=p['balance']+winnings)
+    p=get_player(uid); balance_key = 'stars_balance' if bet.get('currency') == 'STARS' else 'balance'; update_player(uid, **{balance_key: float(p.get(balance_key) or 0)+winnings})
     bet['cashed_out']=True; bet['multiplier']=game_state.current_multiplier
-    return jsonify({'status':'ok','balance':p['balance']+winnings,'multiplier':game_state.current_multiplier,'winnings':winnings})
+    fresh=get_player(uid); return jsonify({'status':'ok','balance':fresh.get('balance') or 0,'stars_balance':fresh.get('stars_balance') or 0,'multiplier':game_state.current_multiplier,'winnings':winnings,'currency':bet.get('currency','TON')})
 
 @app.route('/api/create_deposit', methods=['POST'])
 def create_deposit():
     data = request.json; uid = data.get('user_id'); amt = float(data.get('amount',0))
-    if amt <= 0: return jsonify({'status':'error','message':'Invalid amount'})
+    if amt < 1: return jsonify({'status':'error','message':'Минимум 1 звезда'})
     comment = f"topgift:{uid}:{secrets.token_hex(5)}"
     conn = sqlite3.connect(DB_PATH); c = conn.cursor()
-    c.execute('INSERT INTO deposits (user_id, amount_game, amount_ton, invoice_id, method) VALUES (?,?,?,?,?)', (uid, amt, amt, comment, 'ton'))
+    c.execute('INSERT INTO deposits (user_id, amount_game, amount_ton, invoice_id, method, asset) VALUES (?,?,?,?,?,?)', (uid, amt, amt, comment, 'stars', 'STARS'))
     dep_id = c.lastrowid; conn.commit(); conn.close()
     payload = base64.b64encode(comment.encode()).decode()
     return jsonify({'status':'ok','deposit_id':dep_id,'admin_wallet':ADMIN_WALLET,'amount_ton':amt,'payload':payload})
@@ -347,12 +363,49 @@ def transactions():
     data = request.json; uid = data.get('user_id')
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('SELECT type, amount, created_at FROM transactions WHERE user_id=? ORDER BY created_at DESC LIMIT 30', (uid,))
-    txs = [{'type': r[0], 'amount': r[1], 'date': r[2]} for r in c.fetchall()]
+    c.execute('SELECT type, amount, created_at, COALESCE(currency,"TON") FROM transactions WHERE user_id=? ORDER BY created_at DESC LIMIT 30', (uid,))
+    txs = [{'type': r[0], 'amount': r[1], 'date': r[2], 'currency': r[3]} for r in c.fetchall()]
     c.execute('SELECT amount_game, status, created_at FROM deposits WHERE user_id=? ORDER BY created_at DESC LIMIT 30', (uid,))
     deps = [{'amount_game': r[0], 'status': r[1], 'date': r[2]} for r in c.fetchall()]
     conn.close()
     return jsonify({'transactions': txs, 'deposits': deps})
+
+
+
+def admin_required(uid):
+    return int(uid or 0) == ADMIN_USER_ID
+
+@app.route('/api/admin/player', methods=['POST'])
+def admin_player():
+    data=request.json or {}; admin_id=data.get('admin_id'); target=int(data.get('user_id') or 0)
+    if not admin_required(admin_id): return jsonify({'status':'error','message':'Forbidden'}), 403
+    p=get_player(target)
+    if not p: return jsonify({'status':'error','message':'Пользователь не найден'})
+    return jsonify({'status':'ok','player':{'user_id':target,'name':public_player(p),'balance':p.get('balance') or 0,'stars_balance':p.get('stars_balance') or 0,'is_banned':bool(p.get('is_banned') or 0)}})
+
+@app.route('/api/admin/ban', methods=['POST'])
+def admin_ban():
+    data=request.json or {}; admin_id=data.get('admin_id'); target=int(data.get('user_id') or 0); banned=1 if data.get('banned') else 0
+    if not admin_required(admin_id): return jsonify({'status':'error','message':'Forbidden'}), 403
+    update_player(target, is_banned=banned)
+    return jsonify({'status':'ok','is_banned':bool(banned)})
+
+@app.route('/api/admin/balance', methods=['POST'])
+def admin_balance():
+    data=request.json or {}; admin_id=data.get('admin_id'); target=int(data.get('user_id') or 0); amount=float(data.get('amount') or 0); action=data.get('action'); currency=(data.get('currency') or 'TON').upper()
+    if not admin_required(admin_id): return jsonify({'status':'error','message':'Forbidden'}), 403
+    if currency not in ('TON','STARS') or amount <= 0 or action not in ('add','subtract'): return jsonify({'status':'error','message':'Invalid'})
+    p=get_player(target) or {}; key='stars_balance' if currency=='STARS' else 'balance'; current=float(p.get(key) or 0); new_balance=current+amount if action=='add' else max(0,current-amount)
+    update_player(target, **{key:new_balance})
+    conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('INSERT INTO transactions (user_id,type,amount,currency) VALUES (?,?,?,?)',(target,'admin_'+action, amount if action=='add' else -amount, currency)); conn.commit(); conn.close()
+    return jsonify({'status':'ok','balance':new_balance,'currency':currency})
+
+@app.route('/api/admin/transactions', methods=['POST'])
+def admin_transactions():
+    data=request.json or {}; admin_id=data.get('admin_id'); target=int(data.get('user_id') or 0)
+    if not admin_required(admin_id): return jsonify({'status':'error','message':'Forbidden'}), 403
+    conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('SELECT type,amount,created_at,COALESCE(currency,"TON") FROM transactions WHERE user_id=? ORDER BY created_at DESC LIMIT 80',(target,)); txs=[{'type':r[0],'amount':r[1],'date':r[2],'currency':r[3]} for r in c.fetchall()]; conn.close()
+    return jsonify({'status':'ok','transactions':txs})
 
 @app.route('/api/set_lang', methods=['POST'])
 def set_lang(): return jsonify({'status': 'ok'})
@@ -365,7 +418,7 @@ def get_game_state():
     players_list=[]
     for uid,bet in game_state.bets.items():
         p=get_player(uid) or {}
-        players_list.append({'name':public_player(p),'avatar':p.get('avatar_url') or '','bet':bet['amount'],'cashed_out':bet['cashed_out'],'multiplier':bet['multiplier'] or (game_state.crash_point if game_state.status in ('exploding','crashed') and not bet['cashed_out'] else game_state.current_multiplier),'payout':(bet['amount']*(bet['multiplier'] or 0)) if bet['cashed_out'] else 0})
+        players_list.append({'name':public_player(p),'avatar':p.get('avatar_url') or '','bet':bet['amount'],'currency':bet.get('currency','TON'),'cashed_out':bet['cashed_out'],'multiplier':bet['multiplier'] or (game_state.crash_point if game_state.status in ('exploding','crashed') and not bet['cashed_out'] else game_state.current_multiplier),'payout':(bet['amount']*(bet['multiplier'] or 0)) if bet['cashed_out'] else 0})
     return jsonify({'status':game_state.status,'multiplier':game_state.current_multiplier,'countdown':game_state.countdown,'last_results':game_state.last_results,'crash_point':game_state.crash_point if game_state.status=='crashed' else None,'players':players_list})
 
 def run_game_loop():
@@ -382,7 +435,8 @@ def run_game_loop():
                 if target and not bet['cashed_out'] and game_state.current_multiplier >= target:
                     winnings = bet['amount'] * target
                     p = get_player(uid)
-                    update_player(uid, balance=p['balance'] + winnings)
+                    balance_key = 'stars_balance' if bet.get('currency') == 'STARS' else 'balance'
+                    update_player(uid, **{balance_key: float(p.get(balance_key) or 0) + winnings})
                     bet['cashed_out'] = True
                     bet['multiplier'] = target
             if game_state.current_multiplier>=game_state.crash_point:
@@ -391,11 +445,10 @@ def run_game_loop():
         game_state.status='exploding'
         game_state.last_results.insert(0,round(game_state.crash_point,2))
         if len(game_state.last_results)>8: game_state.last_results=game_state.last_results[:8]
-        time.sleep(1.8)
-        for i in range(10,0,-1):
-            game_state.countdown=i
-            game_state.status='crashed'
-            time.sleep(1)
+        time.sleep(3.2)
+        game_state.status='crashed'
+        time.sleep(1)
+        game_state.current_multiplier=1.0
 
 def deposit_checker():
     while True:
