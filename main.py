@@ -52,12 +52,13 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS deposits (
         id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, amount_game REAL,
         amount_ton REAL, invoice_id TEXT, pay_url TEXT, status TEXT DEFAULT 'pending', method TEXT DEFAULT 'cryptobot', asset TEXT DEFAULT 'TON',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        telegram_payment_charge_id TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
     for sql in (
         'ALTER TABLE deposits ADD COLUMN pay_url TEXT',
         "ALTER TABLE deposits ADD COLUMN method TEXT DEFAULT 'cryptobot'",
         "ALTER TABLE deposits ADD COLUMN asset TEXT DEFAULT 'TON'",
+        'ALTER TABLE deposits ADD COLUMN telegram_payment_charge_id TEXT',
     ):
         try: c.execute(sql)
         except sqlite3.OperationalError: pass
@@ -264,6 +265,37 @@ def cashout():
     bet['cashed_out']=True; bet['multiplier']=game_state.current_multiplier
     fresh=get_player(uid); return jsonify({'status':'ok','balance':fresh.get('balance') or 0,'stars_balance':fresh.get('stars_balance') or 0,'multiplier':game_state.current_multiplier,'winnings':winnings,'currency':bet.get('currency','TON')})
 
+@app.route('/api/create_stars_invoice', methods=['POST'])
+def create_stars_invoice():
+    data = request.json or {}; uid = int(data.get('user_id') or 0); amount = int(data.get('amount') or 0)
+    if amount < 1: return jsonify({'status':'error','message':'Минимум 1 звезда'})
+    p = get_player(uid)
+    if not p or p.get('is_banned'): return jsonify({'status':'error','message':'Пользователь заблокирован'}), 403
+    payload = json.dumps({'user_id': uid, 'amount': amount, 'nonce': secrets.token_hex(8)})
+    conn = sqlite3.connect(DB_PATH); c = conn.cursor()
+    c.execute('INSERT INTO deposits (user_id, amount_game, amount_ton, invoice_id, method, asset) VALUES (?,?,?,?,?,?)', (uid, amount, amount, payload, 'telegram_stars', 'STARS'))
+    dep_id = c.lastrowid; conn.commit(); conn.close()
+    body = {
+        'title': 'Пополнение TopGift',
+        'description': f'Пополнение баланса на {amount} Telegram Stars',
+        'payload': payload,
+        'provider_token': '',
+        'currency': 'XTR',
+        'prices': [{'label': 'Telegram Stars', 'amount': amount}]
+    }
+    try:
+        r = requests.post(f'https://api.telegram.org/bot{TOKEN}/createInvoiceLink', json=body, timeout=10)
+        js = r.json()
+        if r.status_code == 200 and js.get('ok'):
+            c = sqlite3.connect(DB_PATH).cursor()
+            conn = c.connection
+            c.execute('UPDATE deposits SET pay_url=? WHERE id=?', (js['result'], dep_id)); conn.commit(); conn.close()
+            return jsonify({'status':'ok','invoiceLink':js['result'],'deposit_id':dep_id})
+        logger.error(f'Stars invoice error: {js}')
+    except Exception as e:
+        logger.error(f'Stars invoice exception: {e}')
+    return jsonify({'status':'error','message':'Не удалось создать счёт Stars'})
+
 @app.route('/api/create_deposit', methods=['POST'])
 def create_deposit():
     data = request.json; uid = data.get('user_id'); amt = float(data.get('amount',0))
@@ -305,6 +337,8 @@ def check_deposit_status():
     if not row: return jsonify({'status':'not_found'})
     user_id, amount_game, amount_ton, invoice_id, status, method, asset = row
     if status == 'paid': return jsonify({'status':'paid'})
+    if method == 'telegram_stars':
+        return jsonify({'status':'pending'})
     if method == 'cryptobot':
         headers = {'Crypto-Pay-API-Token': CRYPTOBOT_TOKEN}
         try:
@@ -429,7 +463,7 @@ def run_game_loop():
         st=time.time()
         while game_state.current_multiplier<game_state.crash_point:
             elapsed=time.time()-st
-            game_state.current_multiplier=round(1.0 + 0.10 * (pow(1.55, elapsed) - 1.0), 2)
+            game_state.current_multiplier=round(1.0 + 0.06 * (pow(1.38, elapsed) - 1.0), 2)
             for uid, bet in list(game_state.bets.items()):
                 target = float(bet.get('auto_cashout') or 0)
                 if target and not bet['cashed_out'] and game_state.current_multiplier >= target:
@@ -464,8 +498,41 @@ async def run_bot():
         ref=(message.text.split(maxsplit=1)[1].strip() if message.text and len(message.text.split(maxsplit=1))>1 else '')
         update_player(message.from_user.id, username=message.from_user.username or '', first_name=message.from_user.first_name or '', last_name=message.from_user.last_name or '')
         ensure_referral(message.from_user.id, ref)
+        p = get_player(message.from_user.id) or {}
+        if p.get('is_banned'):
+            await message.answer('❌\n<b>Вы заблокированы в боте</b>\nдля выяснения обстоятельств обратитесь в поддержку')
+            return
         kb=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Play TopGift (RU)", web_app=WebAppInfo(url=WEBAPP_URL))]])
         await message.answer("Welcome to TopGift! Start winning real Telegram Gifts right now!", reply_markup=kb)
+
+    @dp.pre_checkout_query()
+    async def pre_checkout(query: types.PreCheckoutQuery):
+        await bot.answer_pre_checkout_query(query.id, ok=True)
+
+    @dp.message(lambda message: bool(message.successful_payment))
+    async def successful_payment(message: types.Message):
+        payment = message.successful_payment
+        if payment.currency != 'XTR':
+            return
+        try:
+            payload = json.loads(payment.invoice_payload)
+        except Exception:
+            payload = {'user_id': message.from_user.id, 'amount': payment.total_amount}
+        uid = int(payload.get('user_id') or message.from_user.id)
+        amount = int(payment.total_amount or payload.get('amount') or 0)
+        conn = sqlite3.connect(DB_PATH); c = conn.cursor()
+        c.execute('SELECT id,status FROM deposits WHERE invoice_id=?', (payment.invoice_payload,))
+        row = c.fetchone()
+        if row and row[1] != 'paid':
+            dep_id = row[0]
+            c.execute('UPDATE deposits SET status=?, telegram_payment_charge_id=? WHERE id=?', ('paid', payment.telegram_payment_charge_id, dep_id))
+            c.execute('UPDATE players SET stars_balance=COALESCE(stars_balance,0)+? WHERE user_id=?', (amount, uid))
+            c.execute('INSERT INTO transactions (user_id,type,amount,currency) VALUES (?,?,?,?)', (uid, 'stars_deposit', amount, 'STARS'))
+            conn.commit(); conn.close()
+            award_referral(uid, amount, 'STARS')
+        else:
+            conn.close()
+        await message.answer(f'✅ Пополнение на {amount} Stars зачислено')
     await dp.start_polling(bot)
 
 if __name__=='__main__':
