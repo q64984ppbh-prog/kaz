@@ -71,13 +71,6 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, type TEXT,
         amount REAL, currency TEXT DEFAULT 'TON', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS promo_codes (
-        code TEXT PRIMARY KEY, max_activations INTEGER, ton_amount REAL DEFAULT 0, stars_amount REAL DEFAULT 0,
-        active INTEGER DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS promo_activations (
-        code TEXT, user_id INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(code,user_id)
-    )''')
     for sql in (
         "ALTER TABLE transactions ADD COLUMN currency TEXT DEFAULT 'TON'",
     ):
@@ -509,45 +502,6 @@ def admin_transactions():
     conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('SELECT type,amount,created_at,COALESCE(currency,"TON") FROM transactions WHERE user_id=? ORDER BY created_at DESC LIMIT 5',(target,)); txs=[{'type':r[0],'amount':r[1],'date':r[2],'currency':r[3]} for r in c.fetchall()]; conn.close()
     return jsonify({'status':'ok','transactions':txs})
 
-
-@app.route('/api/promo/activate', methods=['POST'])
-def promo_activate():
-    data=request.json or {}; uid=int(data.get('user_id') or 0); code=(data.get('code') or '').strip().upper()
-    if not code: return jsonify({'status':'error','message':'not_found'})
-    conn=sqlite3.connect(DB_PATH); c=conn.cursor()
-    c.execute('SELECT code,max_activations,ton_amount,stars_amount,active FROM promo_codes WHERE code=?',(code,)); row=c.fetchone()
-    if not row or not row[4]: conn.close(); return jsonify({'status':'error','message':'not_found'})
-    c.execute('SELECT 1 FROM promo_activations WHERE code=? AND user_id=?',(code,uid))
-    if c.fetchone(): conn.close(); return jsonify({'status':'error','message':'already_used'})
-    c.execute('SELECT COUNT(*) FROM promo_activations WHERE code=?',(code,)); used=c.fetchone()[0]
-    if used >= int(row[1] or 0): conn.close(); return jsonify({'status':'error','message':'exhausted'})
-    c.execute('INSERT INTO promo_activations (code,user_id) VALUES (?,?)',(code,uid))
-    c.execute('UPDATE players SET balance=COALESCE(balance,0)+?, stars_balance=COALESCE(stars_balance,0)+? WHERE user_id=?',(float(row[2] or 0),float(row[3] or 0),uid))
-    if row[2]: c.execute('INSERT INTO transactions (user_id,type,amount,currency) VALUES (?,?,?,?)',(uid,'promo',float(row[2]),'TON'))
-    if row[3]: c.execute('INSERT INTO transactions (user_id,type,amount,currency) VALUES (?,?,?,?)',(uid,'promo',float(row[3]),'STARS'))
-    conn.commit(); conn.close(); p=get_player(uid) or {}
-    return jsonify({'status':'ok','balance':p.get('balance') or 0,'stars_balance':p.get('stars_balance') or 0})
-
-@app.route('/api/admin/promos', methods=['POST'])
-def admin_promos():
-    data=request.json or {}; admin_id=data.get('admin_id')
-    if not admin_required(admin_id): return jsonify({'status':'error','message':'Forbidden'}),403
-    conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('SELECT p.code,p.max_activations,p.ton_amount,p.stars_amount,COUNT(a.user_id) FROM promo_codes p LEFT JOIN promo_activations a ON a.code=p.code WHERE p.active=1 GROUP BY p.code ORDER BY p.created_at DESC')
-    rows=[{'code':r[0],'max':r[1],'ton':r[2],'stars':r[3],'used':r[4]} for r in c.fetchall()]; conn.close(); return jsonify({'status':'ok','promos':rows})
-
-@app.route('/api/admin/promo_create', methods=['POST'])
-def admin_promo_create():
-    data=request.json or {}; admin_id=data.get('admin_id')
-    if not admin_required(admin_id): return jsonify({'status':'error','message':'Forbidden'}),403
-    code=(data.get('code') or '').strip().upper(); uses=int(data.get('uses') or 0); ton=float(data.get('ton') or 0); stars=float(data.get('stars') or 0)
-    if not code or uses<1 or (ton<=0 and stars<=0): return jsonify({'status':'error','message':'Invalid'})
-    conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('INSERT OR REPLACE INTO promo_codes (code,max_activations,ton_amount,stars_amount,active) VALUES (?,?,?,?,1)',(code,uses,ton,stars)); conn.commit(); conn.close(); return jsonify({'status':'ok'})
-
-@app.route('/api/admin/promo_delete', methods=['POST'])
-def admin_promo_delete():
-    data=request.json or {}; admin_id=data.get('admin_id')
-    if not admin_required(admin_id): return jsonify({'status':'error','message':'Forbidden'}),403
-    code=(data.get('code') or '').strip().upper(); conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('UPDATE promo_codes SET active=0 WHERE code=?',(code,)); conn.commit(); conn.close(); return jsonify({'status':'ok'})
 
 @app.route('/api/admin/crash', methods=['POST'])
 def admin_crash():
