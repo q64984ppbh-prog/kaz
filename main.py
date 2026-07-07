@@ -278,8 +278,8 @@ def create_crypto_deposit():
         logger.error(f'CryptoBot error: {e}')
     return jsonify({'status':'error','message':'CryptoBot error'})
 
-@app.route('/api/deposit_status', methods=['POST'])
-def deposit_status():
+@app.route('/api/deposit_status', methods=['POST'], endpoint='deposit_status_api')
+def check_deposit_status():
     req = request.json; dep_id = req.get('deposit_id')
     conn = sqlite3.connect(DB_PATH); c = conn.cursor()
     c.execute("SELECT user_id, amount_game, amount_ton, invoice_id, status, method, COALESCE(asset,'TON') FROM deposits WHERE id=?", (dep_id,))
@@ -339,41 +339,6 @@ def create_withdrawal():
         conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('UPDATE withdrawals SET status=? WHERE id=?', ('failed', wid)); conn.commit(); conn.close()
         notify_user(uid, '⚡️ <b>Ошибка вывода</b>\nСредства возвращены на ваш баланс', {'inline_keyboard': [[{'text':'Поддержка','url':'https://t.me/killowcode'}]]})
         return jsonify({'status':'error','message':'Ошибка вывода','balance':float(fresh.get('balance') or 0)+amt})
-
-@app.route('/api/deposit_status', methods=['POST'])
-def deposit_status():
-    req = request.json; dep_id = req.get('deposit_id')
-    conn = sqlite3.connect(DB_PATH); c = conn.cursor()
-    c.execute('SELECT user_id, amount_game, amount_ton, invoice_id, status, method FROM deposits WHERE id=?', (dep_id,))
-    row = c.fetchone(); conn.close()
-    if not row: return jsonify({'status':'not_found'})
-    user_id, amount_game, amount_ton, invoice_id, status, method = row
-    if status == 'paid': return jsonify({'status':'paid'})
-    if method == 'cryptobot':
-        headers = {'Crypto-Pay-API-Token': CRYPTOBOT_TOKEN}
-        try:
-            r = requests.get(f'{CRYPTOBOT_API}/getInvoices', headers=headers, params={'invoice_ids': invoice_id}, timeout=10)
-            js = r.json()
-            items = js.get('result', {}).get('items', []) if js.get('ok') else []
-            if items and items[0].get('status') == 'paid':
-                credit_deposit(dep_id, user_id, amount_game)
-                return jsonify({'status':'paid'})
-        except Exception as e: logger.error(f'Status check error: {e}')
-    else:
-        try:
-            r=requests.get(f'{TONAPI_URL}/blockchain/accounts/{ADMIN_WALLET}/transactions', headers={'Authorization': f'Bearer {TONAPI_KEY}'}, params={'limit':20}, timeout=10)
-            if r.status_code == 200 and invoice_id in r.text:
-                credit_deposit(dep_id, user_id, amount_game)
-                return jsonify({'status':'paid'})
-        except Exception as e: logger.error(f'TON status error: {e}')
-    return jsonify({'status':'pending'})
-
-@app.route('/api/referral', methods=['POST'])
-def referral():
-    uid=(request.json or {}).get('user_id')
-    p=get_player(uid); ensure_referral(uid); p=get_player(uid)
-    conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('SELECT COUNT(*) FROM referrals WHERE referrer_id=?',(uid,)); count=c.fetchone()[0]; conn.close()
-    return jsonify({'status':'ok','ref_code':p['ref_code'],'ref_count':count,'ref_balance':p.get('ref_balance') or 0,'link':f'https://t.me/{BOT_USERNAME}?start={p["ref_code"]}'})
 
 @app.route('/api/transactions', methods=['POST'])
 def transactions():
