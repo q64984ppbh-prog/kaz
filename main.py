@@ -188,6 +188,7 @@ class GameState:
     crash_point: float = 0.0
     last_results: list = field(default_factory=list)
     bets: dict = field(default_factory=dict)
+    pending_bets: dict = field(default_factory=dict)
 
 game_state = GameState()
 
@@ -216,7 +217,7 @@ def init():
     conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('SELECT COUNT(*) FROM referrals WHERE referrer_id=?',(uid,)); ref_count=c.fetchone()[0]; conn.close()
     return jsonify({'status':'ok','balance':p['balance'],'wallet':p['wallet_address'],'first_name':p['first_name'],'last_name':p['last_name'],'ref_code':p['ref_code'],'ref_count':ref_count,'ref_balance':p.get('ref_balance') or 0,
         'game_state':{'status':game_state.status,'multiplier':game_state.current_multiplier,'countdown':game_state.countdown,'last_results':game_state.last_results,'crash_point':game_state.crash_point if game_state.status=='crashed' else None},
-        'has_bet':uid in game_state.bets,'current_bet':game_state.bets.get(uid,{}).get('amount',0)})
+        'has_bet':uid in game_state.bets or uid in game_state.pending_bets,'current_bet':(game_state.bets.get(uid) or game_state.pending_bets.get(uid) or {}).get('amount',0)})
 
 @app.route('/api/save_wallet', methods=['POST'])
 def save_wallet():
@@ -228,11 +229,12 @@ def save_wallet():
 def place_bet():
     data = request.json; uid = data.get('user_id'); amt = float(data.get('amount',0)); auto_cashout = float(data.get('auto_cashout') or 0)
     p = get_player(uid)
-    if game_state.status!='countdown': return jsonify({'status':'error','message':'Game not in countdown'})
+    if game_state.status not in ('countdown', 'crashed'): return jsonify({'status':'error','message':'Game not in countdown'})
     if amt<=0 or amt>p['balance']: return jsonify({'status':'error','message':'Invalid amount'})
-    if uid in game_state.bets: return jsonify({'status':'error','message':'Already bet'})
+    target_bets = game_state.pending_bets if game_state.status == 'crashed' else game_state.bets
+    if uid in game_state.bets or uid in game_state.pending_bets: return jsonify({'status':'error','message':'Already bet'})
     update_player(uid, balance=p['balance']-amt)
-    game_state.bets[uid]={'amount':amt,'cashed_out':False,'multiplier':0,'auto_cashout':auto_cashout if auto_cashout >= 1.1 else 0}
+    target_bets[uid]={'amount':amt,'cashed_out':False,'multiplier':0,'auto_cashout':auto_cashout if auto_cashout >= 1.1 else 0}
     return jsonify({'status':'ok','balance':p['balance']-amt})
 
 @app.route('/api/cashout', methods=['POST'])
@@ -363,12 +365,12 @@ def get_game_state():
     players_list=[]
     for uid,bet in game_state.bets.items():
         p=get_player(uid) or {}
-        players_list.append({'name':public_player(p),'avatar':p.get('avatar_url') or '','bet':bet['amount'],'cashed_out':bet['cashed_out'],'multiplier':bet['multiplier'] or game_state.current_multiplier})
+        players_list.append({'name':public_player(p),'avatar':p.get('avatar_url') or '','bet':bet['amount'],'cashed_out':bet['cashed_out'],'multiplier':bet['multiplier'] or (game_state.crash_point if game_state.status in ('exploding','crashed') and not bet['cashed_out'] else game_state.current_multiplier),'payout':(bet['amount']*(bet['multiplier'] or 0)) if bet['cashed_out'] else 0})
     return jsonify({'status':game_state.status,'multiplier':game_state.current_multiplier,'countdown':game_state.countdown,'last_results':game_state.last_results,'crash_point':game_state.crash_point if game_state.status=='crashed' else None,'players':players_list})
 
 def run_game_loop():
     while True:
-        game_state.status='countdown'; game_state.bets.clear()
+        game_state.status='countdown'; game_state.bets = game_state.pending_bets; game_state.pending_bets = {}
         for i in range(10,0,-1): game_state.countdown=i; game_state.status='countdown'; time.sleep(1)
         game_state.crash_point=generate_crash_point(); game_state.current_multiplier=1.0; game_state.status='flying'
         st=time.time()
@@ -390,8 +392,10 @@ def run_game_loop():
         game_state.last_results.insert(0,round(game_state.crash_point,2))
         if len(game_state.last_results)>8: game_state.last_results=game_state.last_results[:8]
         time.sleep(1.8)
-        game_state.status='crashed'
-        time.sleep(1.6)
+        for i in range(10,0,-1):
+            game_state.countdown=i
+            game_state.status='crashed'
+            time.sleep(1)
 
 def deposit_checker():
     while True:
