@@ -185,13 +185,29 @@ def coingecko_rate_loop():
         get_ton_usd_rate()
         time.sleep(300)
 
-def generate_crash_point():
-    r = random.random()
-    if r < 0.42: return round(random.uniform(1.0, 1.45), 2)
-    elif r < 0.74: return round(random.uniform(1.45, 2.4), 2)
-    elif r < 0.94: return round(random.uniform(2.4, 5.0), 2)
-    elif r < 0.992: return round(random.uniform(5.0, 12.0), 2)
-    return round(random.uniform(12.0, 25.0), 2)
+MAX_CRASH_MULTIPLIER = 1488.0
+
+def make_round_seeds():
+    server_seed = secrets.token_hex(32)
+    client_seed = secrets.token_hex(32)
+    salt = secrets.token_hex(16)
+    server_seed_hash = hashlib.sha256(server_seed.encode()).hexdigest()
+    return server_seed, client_seed, salt, server_seed_hash
+
+def generate_crash_point(server_seed=None, client_seed=None, salt=None, bonus_round=False):
+    server_seed = server_seed or secrets.token_hex(32)
+    client_seed = client_seed or secrets.token_hex(32)
+    salt = salt or secrets.token_hex(16)
+    digest = hmac.new(server_seed.encode(), f'{client_seed}:{salt}'.encode(), hashlib.sha256).hexdigest()
+    roll = int(digest[:13], 16) / float(0xFFFFFFFFFFFFF)
+    if bonus_round:
+        if roll > 0.992:
+            return round(600 + (MAX_CRASH_MULTIPLIER - 600) * ((roll - 0.992) / 0.008), 2)
+        return round(100 + 300 * roll, 2)
+    if roll < 0.01:
+        return 1.0
+    crash = 0.99 / (1.0 - roll)
+    return round(min(MAX_CRASH_MULTIPLIER, max(1.0, crash)), 2)
 
 @dataclass
 class GameState:
@@ -202,6 +218,13 @@ class GameState:
     last_results: list = field(default_factory=list)
     bets: dict = field(default_factory=dict)
     pending_bets: dict = field(default_factory=dict)
+    server_seed: str = ''
+    server_seed_hash: str = ''
+    client_seed: str = ''
+    salt: str = ''
+    revealed_server_seed: str = ''
+    revealed_salt: str = ''
+    force_crash: bool = False
 
 game_state = GameState()
 
@@ -441,6 +464,15 @@ def admin_transactions():
     conn=sqlite3.connect(DB_PATH); c=conn.cursor(); c.execute('SELECT type,amount,created_at,COALESCE(currency,"TON") FROM transactions WHERE user_id=? ORDER BY created_at DESC LIMIT 80',(target,)); txs=[{'type':r[0],'amount':r[1],'date':r[2],'currency':r[3]} for r in c.fetchall()]; conn.close()
     return jsonify({'status':'ok','transactions':txs})
 
+@app.route('/api/admin/crash', methods=['POST'])
+def admin_crash():
+    data=request.json or {}; admin_id=data.get('admin_id')
+    if not admin_required(admin_id): return jsonify({'status':'error','message':'Forbidden'}), 403
+    if game_state.status != 'flying': return jsonify({'status':'error','message':'Раунд сейчас не летит'})
+    game_state.force_crash = True
+    game_state.crash_point = min(game_state.crash_point or game_state.current_multiplier, max(1.0, game_state.current_multiplier))
+    return jsonify({'status':'ok','multiplier':game_state.current_multiplier})
+
 @app.route('/api/set_lang', methods=['POST'])
 def set_lang(): return jsonify({'status': 'ok'})
 
@@ -453,17 +485,24 @@ def get_game_state():
     for uid,bet in game_state.bets.items():
         p=get_player(uid) or {}
         players_list.append({'name':public_player(p),'avatar':p.get('avatar_url') or '','bet':bet['amount'],'currency':bet.get('currency','TON'),'cashed_out':bet['cashed_out'],'multiplier':bet['multiplier'] or (game_state.crash_point if game_state.status in ('exploding','crashed') and not bet['cashed_out'] else game_state.current_multiplier),'payout':(bet['amount']*(bet['multiplier'] or 0)) if bet['cashed_out'] else 0})
-    return jsonify({'status':game_state.status,'multiplier':game_state.current_multiplier,'countdown':game_state.countdown,'last_results':game_state.last_results,'crash_point':game_state.crash_point if game_state.status=='crashed' else None,'players':players_list})
+    return jsonify({'status':game_state.status,'multiplier':game_state.current_multiplier,'countdown':game_state.countdown,'last_results':game_state.last_results,'crash_point':game_state.crash_point if game_state.status=='crashed' else None,'fair':{'server_seed_hash':game_state.server_seed_hash,'client_seed':game_state.client_seed,'salt':game_state.revealed_salt if game_state.status=='crashed' else None,'server_seed':game_state.revealed_server_seed if game_state.status=='crashed' else None},'players':players_list})
 
 def run_game_loop():
     while True:
-        game_state.status='countdown'; game_state.bets = game_state.pending_bets; game_state.pending_bets = {}
+        game_state.status='countdown'; game_state.bets = game_state.pending_bets; game_state.pending_bets = {}; game_state.force_crash = False
+        game_state.server_seed, game_state.client_seed, game_state.salt, game_state.server_seed_hash = make_round_seeds()
+        game_state.revealed_server_seed = ''; game_state.revealed_salt = ''
         for i in range(10,0,-1): game_state.countdown=i; game_state.status='countdown'; time.sleep(1)
-        game_state.crash_point=generate_crash_point(); game_state.current_multiplier=1.0; game_state.status='flying'
+        bonus_round = not game_state.bets
+        game_state.crash_point=generate_crash_point(game_state.server_seed, game_state.client_seed, game_state.salt, bonus_round); game_state.current_multiplier=1.0; game_state.status='flying'
         st=time.time()
         while game_state.current_multiplier<game_state.crash_point:
             elapsed=time.time()-st
+<<<<<<< ours
             game_state.current_multiplier=round(1.0 + 0.06 * (pow(1.38, elapsed) - 1.0), 2)
+=======
+            game_state.current_multiplier=round(1.0 + 0.18 * (pow(1.42, elapsed) - 1.0), 2)
+>>>>>>> theirs
             for uid, bet in list(game_state.bets.items()):
                 target = float(bet.get('auto_cashout') or 0)
                 if target and not bet['cashed_out'] and game_state.current_multiplier >= target:
@@ -473,9 +512,14 @@ def run_game_loop():
                     update_player(uid, **{balance_key: float(p.get(balance_key) or 0) + winnings})
                     bet['cashed_out'] = True
                     bet['multiplier'] = target
-            if game_state.current_multiplier>=game_state.crash_point:
+            active_bets = [b for b in game_state.bets.values() if not b.get('cashed_out')]
+            if not active_bets and game_state.crash_point < 100:
+                game_state.crash_point = generate_crash_point(game_state.server_seed, game_state.client_seed, game_state.salt, True)
+            if game_state.force_crash or game_state.current_multiplier>=game_state.crash_point:
                 game_state.current_multiplier=game_state.crash_point; break
             time.sleep(max(0.02,0.06-game_state.current_multiplier*0.002))
+        game_state.revealed_server_seed = game_state.server_seed
+        game_state.revealed_salt = game_state.salt
         game_state.status='exploding'
         game_state.last_results.insert(0,round(game_state.crash_point,2))
         if len(game_state.last_results)>8: game_state.last_results=game_state.last_results[:8]
