@@ -143,12 +143,6 @@ def credit_deposit(dep_id, user_id, amount):
     if changed:
         c.execute(f'UPDATE players SET {balance_col}={balance_col}+? WHERE user_id=?', (amount, user_id))
         c.execute('INSERT INTO transactions (user_id, type, amount, currency) VALUES (?,?,?,?)', (user_id, 'deposit', amount, currency))
-        c.execute('SELECT referrer_id FROM players WHERE user_id=?', (user_id,))
-        row = c.fetchone()
-        if row and row[0]:
-            reward = round(amount * REF_REWARD_RATE, 6)
-            c.execute(f'UPDATE players SET {balance_col}={balance_col}+?, ref_balance=COALESCE(ref_balance,0)+? WHERE user_id=?', (reward, reward, row[0]))
-            c.execute('INSERT INTO transactions (user_id, type, amount, currency) VALUES (?,?,?,?)', (row[0], 'referral_bonus', reward, currency))
     conn.commit(); conn.close()
     return bool(changed)
 
@@ -162,8 +156,13 @@ def award_referral(user_id, amount, currency='TON'):
     if row and row[0]:
         reward = round(float(amount or 0) * REF_REWARD_RATE, 6)
         if reward > 0:
-            c.execute(f'UPDATE players SET {balance_col}={balance_col}+?, ref_balance=COALESCE(ref_balance,0)+? WHERE user_id=?', (reward, reward, row[0]))
-            c.execute('INSERT INTO transactions (user_id, type, amount, currency) VALUES (?,?,?,?)', (row[0], 'referral_bonus', reward, currency))
+            referrer_id = row[0]
+            c.execute(f'UPDATE players SET {balance_col}={balance_col}+?, ref_balance=COALESCE(ref_balance,0)+? WHERE user_id=?', (reward, reward, referrer_id))
+            c.execute('INSERT INTO transactions (user_id, type, amount, currency) VALUES (?,?,?,?)', (referrer_id, 'referral_bonus', reward, currency))
+            conn.commit(); conn.close()
+            amount_text = f'{reward:.0f}' if currency == 'STARS' else f'{reward:.2f}'
+            notify_user(referrer_id, f'<tg-emoji emoji-id="5280818098960611598">🤑</tg-emoji> <b>На ваш баланс начислено <code>{amount_text}</code><tg-emoji emoji-id="5359719332542718652">💎</tg-emoji> за ставку реферала</b>')
+            return
     conn.commit(); conn.close()
 
 def get_ton_usd_rate():
@@ -200,7 +199,7 @@ def coingecko_rate_loop():
         get_ton_usd_rate()
         time.sleep(300)
 
-MAX_CRASH_MULTIPLIER = 1488.0
+MAX_CRASH_MULTIPLIER = 25.0
 
 def make_round_seeds():
     server_seed = secrets.token_hex(32)
@@ -210,19 +209,7 @@ def make_round_seeds():
     return server_seed, client_seed, salt, server_seed_hash
 
 def generate_crash_point(server_seed=None, client_seed=None, salt=None, bonus_round=False):
-    server_seed = server_seed or secrets.token_hex(32)
-    client_seed = client_seed or secrets.token_hex(32)
-    salt = salt or secrets.token_hex(16)
-    digest = hmac.new(server_seed.encode(), f'{client_seed}:{salt}'.encode(), hashlib.sha256).hexdigest()
-    roll = int(digest[:13], 16) / float(0xFFFFFFFFFFFFF)
-    if bonus_round:
-        if roll > 0.992:
-            return round(600 + (MAX_CRASH_MULTIPLIER - 600) * ((roll - 0.992) / 0.008), 2)
-        return round(100 + 300 * roll, 2)
-    if roll < 0.01:
-        return 1.0
-    crash = 0.99 / (1.0 - roll)
-    return round(min(MAX_CRASH_MULTIPLIER, max(1.0, crash)), 2)
+    return round(1.0 + secrets.randbelow(int((MAX_CRASH_MULTIPLIER - 1.0) * 100) + 1) / 100, 2)
 
 @dataclass
 class GameState:
@@ -289,6 +276,7 @@ def place_bet():
     if amt<=0 or amt>float(p.get(balance_key) or 0): return jsonify({'status':'error','message':'Недостаточно средств'})
     if uid in game_state.bets or uid in game_state.pending_bets: return jsonify({'status':'error','message':'Already bet'})
     update_player(uid, **{balance_key: float(p.get(balance_key) or 0)-amt})
+    award_referral(uid, amt, currency)
     game_state.bets[uid]={'amount':amt,'currency':currency,'cashed_out':False,'multiplier':0,'auto_cashout':auto_cashout if auto_cashout >= 1.1 else 0}
     return jsonify({'status':'ok','balance':p['balance'] if currency == 'STARS' else p['balance']-amt,'stars_balance':(float(p.get('stars_balance') or 0)-amt) if currency == 'STARS' else float(p.get('stars_balance') or 0)})
 
@@ -500,7 +488,7 @@ def get_game_state():
     for uid,bet in game_state.bets.items():
         p=get_player(uid) or {}
         players_list.append({'name':public_player(p),'avatar':p.get('avatar_url') or '','bet':bet['amount'],'currency':bet.get('currency','TON'),'cashed_out':bet['cashed_out'],'multiplier':bet['multiplier'] or (game_state.crash_point if game_state.status in ('exploding','crashed') and not bet['cashed_out'] else game_state.current_multiplier),'payout':(bet['amount']*(bet['multiplier'] or 0)) if bet['cashed_out'] else 0})
-    return jsonify({'status':game_state.status,'multiplier':game_state.current_multiplier,'countdown':game_state.countdown,'last_results':game_state.last_results,'crash_point':game_state.crash_point if game_state.status=='crashed' else None,'fair':{'server_seed_hash':game_state.server_seed_hash,'client_seed':game_state.client_seed,'salt':game_state.revealed_salt if game_state.status=='crashed' else None,'server_seed':game_state.revealed_server_seed if game_state.status=='crashed' else None},'players':players_list})
+    return jsonify({'status':game_state.status,'multiplier':game_state.current_multiplier,'countdown':game_state.countdown,'last_results':game_state.last_results,'crash_point':game_state.crash_point if game_state.status=='crashed' else None,'players':players_list})
 
 def run_game_loop():
     while True:
@@ -525,9 +513,6 @@ def run_game_loop():
                     update_player(uid, **{balance_key: float(p.get(balance_key) or 0) + winnings})
                     bet['cashed_out'] = True
                     bet['multiplier'] = target
-            active_bets = [b for b in game_state.bets.values() if not b.get('cashed_out')]
-            if not active_bets and game_state.crash_point < 100:
-                game_state.crash_point = generate_crash_point(game_state.server_seed, game_state.client_seed, game_state.salt, True)
             if game_state.force_crash or game_state.current_multiplier>=game_state.crash_point:
                 game_state.current_multiplier=game_state.crash_point; break
             time.sleep(max(0.02,0.06-game_state.current_multiplier*0.002))
@@ -559,8 +544,17 @@ async def run_bot():
         if p.get('is_banned'):
             await message.answer('❌\n<b>Вы заблокированы в боте</b>\nдля выяснения обстоятельств обратитесь в поддержку')
             return
-        kb=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Play TopGift (RU)", web_app=WebAppInfo(url=WEBAPP_URL))]])
-        await message.answer("Welcome to TopGift! Start winning real Telegram Gifts right now!", reply_markup=kb)
+        kb=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Play", web_app=WebAppInfo(url=WEBAPP_URL))]])
+        await message.answer("<b>Welcome to UP! №1 Crash Game in Telegram</b>", reply_markup=kb)
+
+    @dp.message(Command('admin'))
+    async def cmd_admin(message: types.Message):
+        if message.from_user.id != ADMIN_USER_ID:
+            return
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text='Открыть админ-действия', callback_data='admin_help')],
+        ])
+        await message.answer('<b>Админ панель</b>\nКоманды: /admin, /start. Управление пользователями доступно через API админ-панели бота.', reply_markup=kb)
 
     @dp.pre_checkout_query()
     async def pre_checkout(query: types.PreCheckoutQuery):
@@ -586,7 +580,6 @@ async def run_bot():
             c.execute('UPDATE players SET stars_balance=COALESCE(stars_balance,0)+? WHERE user_id=?', (amount, uid))
             c.execute('INSERT INTO transactions (user_id,type,amount,currency) VALUES (?,?,?,?)', (uid, 'stars_deposit', amount, 'STARS'))
             conn.commit(); conn.close()
-            award_referral(uid, amount, 'STARS')
         else:
             conn.close()
         await message.answer(f'✅ Пополнение на {amount} Stars зачислено')

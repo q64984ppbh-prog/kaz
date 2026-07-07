@@ -9,7 +9,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 TOKEN = '8731702089:AAHOAcCPSsbQBeYDqdizzxNO4mS8_uHfd4Q'
-WEBAPP_URL = 'https://missile-civic-stops-enlarge.trycloudflare.com'
+WEBAPP_URL = 'https://creator-buys-salem-labs.trycloudflare.com'
+ADMIN_USER_ID = 8374183799
 
 dp = Dispatcher()
 
@@ -18,12 +19,25 @@ async def cmd_start(message: types.Message):
     logger.info(f"Received /start from user {message.from_user.id}")
     keyboard = InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(
-            text="Play TopGift (RU)",
+            text="Play",
             web_app=WebAppInfo(url=WEBAPP_URL)
         )
     ]])
     await message.answer(
-        "Welcome to TopGift! Start winning real Telegram Gifts right now!",
+        "<b>Welcome to UP! №1 Crash Game in Telegram</b>",
+        reply_markup=keyboard
+    )
+
+
+@dp.message(Command('admin'))
+async def cmd_admin(message: types.Message):
+    if message.from_user.id != ADMIN_USER_ID:
+        return
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="Админ-действия", callback_data="admin_help")
+    ]])
+    await message.answer(
+        "<b>Админ панель</b>\nКоманды: /admin, /start. Управление перенесено из мини-аппки в бота.",
         reply_markup=keyboard
     )
 
